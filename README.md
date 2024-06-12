@@ -29,6 +29,8 @@ Enable it by adding the `tls_fragment` entry to any outbound connection:
 Bypasses Cloudflare WARP blockings by applying certain Wireguard hacks.
 Enabled by default for all detected WARP endpoints.
 
+## Examples
+See the [examples](https://github.com/kyochikuto/sing-box-plus/tree/main/examples) directory for configuration examples.
 
 ## Fork License
 ```
