@@ -11,14 +11,16 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/redpilllabs/wireguard-go/conn"
+	"github.com/redpilllabs/wireguard-go/device"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/wireguard"
-	"github.com/sagernet/sing-dns"
-	"github.com/sagernet/sing-tun"
+	dns "github.com/sagernet/sing-dns"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -26,8 +28,6 @@ import (
 	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
-	"github.com/sagernet/wireguard-go/conn"
-	"github.com/sagernet/wireguard-go/device"
 )
 
 var (
@@ -38,7 +38,6 @@ var (
 type WireGuard struct {
 	myOutboundAdapter
 	ctx           context.Context
-	workers       int
 	peers         []wireguard.PeerConfig
 	useStdNetBind bool
 	listener      N.Dialer
@@ -62,7 +61,6 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 			dependencies: withDialerDependency(options.DialerOptions),
 		},
 		ctx:          ctx,
-		workers:      options.Workers,
 		pauseManager: service.FromContext[pause.Manager](ctx),
 	}
 	peers, err := wireguard.ParsePeers(options)
@@ -170,7 +168,7 @@ func (w *WireGuard) start() error {
 		Errorf: func(format string, args ...interface{}) {
 			w.logger.Error(fmt.Sprintf(strings.ToLower(format), args...))
 		},
-	}, w.workers)
+	})
 	ipcConf := w.ipcConf
 	for _, peer := range w.peers {
 		ipcConf += peer.GenerateIpcLines()
