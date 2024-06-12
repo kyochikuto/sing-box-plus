@@ -8,15 +8,15 @@ import (
 	"os"
 	"sync"
 
+	wgTun "github.com/redpilllabs/wireguard-go/tun"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	wgTun "github.com/sagernet/wireguard-go/tun"
 )
 
 var _ Device = (*SystemDevice)(nil)
