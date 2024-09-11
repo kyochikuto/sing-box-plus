@@ -63,7 +63,7 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		ctx:          ctx,
 		pauseManager: service.FromContext[pause.Manager](ctx),
 	}
-	peers, err := wireguard.ParsePeers(options)
+	peers, err := wireguard.ParsePeers(options, logger)
 	if err != nil {
 		return nil, err
 	}
