@@ -38,6 +38,7 @@ var (
 type WireGuard struct {
 	myOutboundAdapter
 	ctx           context.Context
+	workers       int
 	peers         []wireguard.PeerConfig
 	useStdNetBind bool
 	listener      N.Dialer
@@ -61,9 +62,10 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 			dependencies: withDialerDependency(options.DialerOptions),
 		},
 		ctx:          ctx,
+		workers:      options.Workers,
 		pauseManager: service.FromContext[pause.Manager](ctx),
 	}
-	peers, err := wireguard.ParsePeers(options)
+	peers, err := wireguard.ParsePeers(options, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +170,7 @@ func (w *WireGuard) start() error {
 		Errorf: func(format string, args ...interface{}) {
 			w.logger.Error(fmt.Sprintf(strings.ToLower(format), args...))
 		},
-	})
+	}, w.workers)
 	ipcConf := w.ipcConf
 	for _, peer := range w.peers {
 		ipcConf += peer.GenerateIpcLines()
