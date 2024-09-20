@@ -10,42 +10,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/metacubex/tfo-go"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
-
-	"github.com/metacubex/tfo-go"
 )
 
 type slowOpenConn struct {
-	dialer      *tfo.Dialer
 	ctx         context.Context
-	network     string
-	destination M.Socksaddr
 	conn        net.Conn
-	create      chan struct{}
-	access      sync.Mutex
 	err         error
-}
-
-func DialSlowContext(dialer *tcpDialer, ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if dialer.DisableTFO || N.NetworkName(network) != N.NetworkTCP {
-		switch N.NetworkName(network) {
-		case N.NetworkTCP, N.NetworkUDP:
-			return dialer.Dialer.DialContext(ctx, network, destination.String())
-		default:
-			return dialer.Dialer.DialContext(ctx, network, destination.AddrString())
-		}
-	}
-	return &slowOpenConn{
-		dialer:      dialer,
-		ctx:         ctx,
-		network:     network,
-		destination: destination,
-		create:      make(chan struct{}),
-	}, nil
+	dialer      *tfo.Dialer
+	create      chan struct{}
+	destination M.Socksaddr
+	network     string
+	access      sync.Mutex
 }
 
 func (c *slowOpenConn) Read(b []byte) (n int, err error) {
