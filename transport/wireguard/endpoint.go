@@ -3,7 +3,7 @@ package wireguard
 import (
 	"net/netip"
 
-	"github.com/sagernet/wireguard-go/conn"
+	"github.com/redpilllabs/wireguard-go/conn"
 )
 
 var _ conn.Endpoint = (*Endpoint)(nil)
