@@ -2,9 +2,7 @@
 
 package dialer
 
-import (
-	"github.com/sagernet/wireguard-go/conn"
-)
+import "github.com/redpilllabs/wireguard-go/conn"
 
 var _ WireGuardListener = (conn.Listener)(nil)
 
