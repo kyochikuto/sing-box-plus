@@ -4,10 +4,18 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/netip"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/ipscanner"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing-box/warp"
 	dns "github.com/sagernet/sing-dns"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -21,6 +29,7 @@ type PeerConfig struct {
 	PreSharedKey   string
 	AllowedIPs     []string
 	Reserved       [3]uint8
+	TryUnblockWarp bool
 }
 
 func (c PeerConfig) GenerateIpcLines() string {
@@ -32,23 +41,64 @@ func (c PeerConfig) GenerateIpcLines() string {
 	for _, allowedIP := range c.AllowedIPs {
 		ipcLines += "\nallowed_ip=" + allowedIP
 	}
+	if c.Reserved != [3]uint8{0, 0, 0} {
+		ipcLines += "\nreserved=" + fmt.Sprintf("%d,%d,%d\n", c.Reserved[0], c.Reserved[1], c.Reserved[2])
+	}
+	if c.TryUnblockWarp {
+		ipcLines += "\ntry_unblock_warp=true"
+	}
+
 	return ipcLines
 }
 
-func ParsePeers(options option.WireGuardOutboundOptions) ([]PeerConfig, error) {
+func scanWarpEndpoints(options option.WireGuardOutboundOptions, port uint16) (ipscanner.IPInfo, error) {
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	scanOpts := ipscanner.WarpScanOptions{
+		PrivateKey: options.PrivateKey,
+		PublicKey:  warp.WarpPublicKey,
+		MaxRTT:     500 * time.Millisecond,
+		V4:         true,
+		V6:         true,
+		Port:       port,
+	}
+
+	return ipscanner.RunWarpScan(ctx, scanOpts)
+}
+
+func ParsePeers(options option.WireGuardOutboundOptions, logger log.ContextLogger) ([]PeerConfig, error) {
 	var peers []PeerConfig
 	if len(options.Peers) > 0 {
 		for peerIndex, rawPeer := range options.Peers {
 			peer := PeerConfig{
 				AllowedIPs: rawPeer.AllowedIPs,
 			}
-			destination := rawPeer.ServerOptions.Build()
-			if destination.IsFqdn() {
-				peer.destination = destination
-				peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+
+			if rawPeer.ServerOptions.Server == "warp_auto" {
+				if isPeerCloudflareWarp(rawPeer.PublicKey) {
+					logger.Info("running WARP IP scanner, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options, rawPeer.ServerOptions.ServerPort)
+					if err != nil {
+						return nil, err
+					}
+					logger.Info("fastest WARP endpoint available: ", bestEndpoint.AddrPort.String())
+
+					peer.Endpoint = bestEndpoint.AddrPort
+					peer.TryUnblockWarp = true
+				} else {
+					logger.Fatal("WARP IP scanner enabled but wrong PublicKey was found!")
+				}
 			} else {
-				peer.Endpoint = destination.AddrPort()
+				destination := rawPeer.ServerOptions.Build()
+				if destination.IsFqdn() {
+					peer.destination = destination
+					peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+				} else {
+					peer.Endpoint = destination.AddrPort()
+				}
 			}
+
 			{
 				bytes, err := base64.StdEncoding.DecodeString(rawPeer.PublicKey)
 				if err != nil {
@@ -72,6 +122,7 @@ func ParsePeers(options option.WireGuardOutboundOptions) ([]PeerConfig, error) {
 				}
 				copy(peer.Reserved[:], options.Reserved)
 			}
+
 			peers = append(peers, peer)
 		}
 	} else {
@@ -93,13 +144,32 @@ func ParsePeers(options option.WireGuardOutboundOptions) ([]PeerConfig, error) {
 		if addressHas6 {
 			peer.AllowedIPs = append(peer.AllowedIPs, netip.PrefixFrom(netip.IPv6Unspecified(), 0).String())
 		}
-		destination := options.ServerOptions.Build()
-		if destination.IsFqdn() {
-			peer.destination = destination
-			peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+
+		if options.Server == "warp_auto" {
+			if isPeerCloudflareWarp(options.PeerPublicKey) {
+				logger.Info("running WARP IP scanner, this might take a while...")
+
+				bestEndpoint, err := scanWarpEndpoints(options, options.ServerPort)
+				if err != nil {
+					return nil, err
+				}
+				logger.Info("best warp endpoint available: ", bestEndpoint.AddrPort.String())
+
+				peer.Endpoint = bestEndpoint.AddrPort
+				peer.TryUnblockWarp = true
+			} else {
+				logger.Fatal("WARP IP scanner enabled but wrong PublicKey was found!")
+			}
 		} else {
-			peer.Endpoint = destination.AddrPort()
+			destination := options.ServerOptions.Build()
+			if destination.IsFqdn() {
+				peer.destination = destination
+				peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+			} else {
+				peer.Endpoint = destination.AddrPort()
+			}
 		}
+
 		{
 			bytes, err := base64.StdEncoding.DecodeString(options.PeerPublicKey)
 			if err != nil {
@@ -145,4 +215,12 @@ func ResolvePeers(ctx context.Context, router adapter.Router, peers []PeerConfig
 
 	}
 	return nil
+}
+
+func isPeerCloudflareWarp(publicKey string) bool {
+	if publicKey == warp.WarpPublicKey {
+		return true
+	}
+
+	return false
 }

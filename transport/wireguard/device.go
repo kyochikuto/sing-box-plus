@@ -1,8 +1,8 @@
 package wireguard
 
 import (
+	"github.com/redpilllabs/wireguard-go/tun"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/wireguard-go/tun"
 )
 
 type Device interface {
