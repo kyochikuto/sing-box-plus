@@ -6,6 +6,7 @@ require (
 	github.com/caddyserver/certmagic v0.20.0
 	github.com/cloudflare/circl v1.3.7
 	github.com/cretz/bine v0.2.0
+	github.com/flynn/noise v1.1.0
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-chi/render v1.0.3
 	github.com/gofrs/uuid/v5 v5.3.2
@@ -16,7 +17,9 @@ require (
 	github.com/metacubex/tfo-go v0.0.0-20241231083714-66613d49c422
 	github.com/mholt/acmez v1.2.0
 	github.com/miekg/dns v1.1.63
+	github.com/noql-net/certpool v0.0.0-20250128174907-b15afbea6eae
 	github.com/oschwald/maxminddb-golang v1.12.0
+	github.com/redpilllabs/wireguard-go v0.1.3
 	github.com/sagernet/asc-go v0.0.0-20241217030726-d563060fe4e1
 	github.com/sagernet/bbolt v0.0.0-20231014093535-ea5cb2fe9f0a
 	github.com/sagernet/cloudflare-tls v0.0.0-20231208171750-a4483c1b7cd1
@@ -37,7 +40,6 @@ require (
 	github.com/sagernet/sing-vmess v0.2.3
 	github.com/sagernet/smux v1.5.34-mod.2
 	github.com/sagernet/utls v1.6.7
-	github.com/sagernet/wireguard-go v0.0.1-beta.7
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.10.0
@@ -54,7 +56,7 @@ require (
 	howett.net/plist v1.0.1
 )
 
-//replace github.com/sagernet/sing => ../sing
+// replace github.com/redpilllabs/wireguard-go => ../wireguard-go
 
 require (
 	github.com/ajg/form v1.5.1 // indirect
@@ -79,7 +81,6 @@ require (
 	github.com/libdns/libdns v0.2.2 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/onsi/ginkgo/v2 v2.9.7 // indirect
 	github.com/pierrec/lz4/v4 v4.1.14 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -98,7 +99,6 @@ require (
 	golang.org/x/tools v0.24.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240227224415-6ceb2ff114de // indirect
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 )

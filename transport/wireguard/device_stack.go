@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 
+	"github.com/redpilllabs/wireguard-go/device"
+	wgTun "github.com/redpilllabs/wireguard-go/tun"
 	"github.com/sagernet/gvisor/pkg/buffer"
 	"github.com/sagernet/gvisor/pkg/tcpip"
 	"github.com/sagernet/gvisor/pkg/tcpip/adapters/gonet"
@@ -16,12 +18,10 @@ import (
 	"github.com/sagernet/gvisor/pkg/tcpip/stack"
 	"github.com/sagernet/gvisor/pkg/tcpip/transport/tcp"
 	"github.com/sagernet/gvisor/pkg/tcpip/transport/udp"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/wireguard-go/device"
-	wgTun "github.com/sagernet/wireguard-go/tun"
 )
 
 var _ Device = (*stackDevice)(nil)

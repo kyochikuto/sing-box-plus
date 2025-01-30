@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redpilllabs/wireguard-go/conn"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -15,7 +16,6 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
-	"github.com/sagernet/wireguard-go/conn"
 )
 
 var _ conn.Bind = (*ClientBind)(nil)
