@@ -8,8 +8,15 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
+	"github.com/redpilllabs/wireguard-go/conn"
+	"github.com/redpilllabs/wireguard-go/device"
+	"github.com/sagernet/sing-box/ipscanner"
+	"github.com/sagernet/sing-box/warp"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -17,8 +24,6 @@ import (
 	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
-	"github.com/sagernet/wireguard-go/conn"
-	"github.com/sagernet/wireguard-go/device"
 
 	"go4.org/netipx"
 )
@@ -56,7 +61,47 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 		if rawPeer.Endpoint.Addr.IsValid() {
 			peer.endpoint = rawPeer.Endpoint.AddrPort()
 		} else if rawPeer.Endpoint.IsFqdn() {
-			peer.destination = rawPeer.Endpoint
+			if warp.IsPeerCloudflareWarp(rawPeer.PublicKey) {
+				switch rawPeer.Endpoint.AddrString() {
+				case "warp_auto":
+					options.Logger.Info("running WARP IP scanner on all subnets, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.All, rawPeer.Endpoint.Port)
+					if err != nil {
+						return nil, err
+					}
+					options.Logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.endpoint = bestEndpoint.AddrPort
+					peer.enableWarpNoiseGen = true
+				case "warp_188":
+					options.Logger.Info("running WARP IP scanner on the 188.114.96.0/23 subnet, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix188, rawPeer.Endpoint.Port)
+					if err != nil {
+						return nil, err
+					}
+					options.Logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.endpoint = bestEndpoint.AddrPort
+					peer.enableWarpNoiseGen = true
+				case "warp_162":
+					options.Logger.Info("running WARP IP scanner on the 162.159.192.0/23 subnet, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix162, rawPeer.Endpoint.Port)
+					if err != nil {
+						return nil, err
+					}
+					options.Logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.endpoint = bestEndpoint.AddrPort
+					peer.enableWarpNoiseGen = true
+				default:
+					peer.destination = rawPeer.Endpoint
+				}
+			} else {
+				peer.destination = rawPeer.Endpoint
+			}
 		}
 		publicKeyBytes, err := base64.StdEncoding.DecodeString(rawPeer.PublicKey)
 		if err != nil {
@@ -228,13 +273,14 @@ func (e *Endpoint) onPauseUpdated(event int) {
 }
 
 type peerConfig struct {
-	destination     M.Socksaddr
-	endpoint        netip.AddrPort
-	publicKeyHex    string
-	preSharedKeyHex string
-	allowedIPs      []netip.Prefix
-	keepalive       uint16
-	reserved        [3]uint8
+	destination        M.Socksaddr
+	endpoint           netip.AddrPort
+	publicKeyHex       string
+	preSharedKeyHex    string
+	allowedIPs         []netip.Prefix
+	keepalive          uint16
+	reserved           [3]uint8
+	enableWarpNoiseGen bool
 }
 
 func (c peerConfig) GenerateIpcLines() string {
@@ -251,5 +297,33 @@ func (c peerConfig) GenerateIpcLines() string {
 	if c.keepalive > 0 {
 		ipcLines += "\npersistent_keepalive_interval=" + F.ToString(c.keepalive)
 	}
+	if c.enableWarpNoiseGen {
+		ipcLines += "\nenable_warp_noise_gen=true"
+	}
+
 	return ipcLines
+}
+
+func isPeerCloudflareWarp(publicKey string) bool {
+	if publicKey == warp.WarpPublicKey {
+		return true
+	}
+
+	return false
+}
+
+func scanWarpEndpoints(privateKey string, cidrPrefix warp.Prefix, port uint16) (ipscanner.IPInfo, error) {
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	scanOpts := ipscanner.WarpScanOptions{
+		PrivateKey: privateKey,
+		PublicKey:  warp.WarpPublicKey,
+		MaxRTT:     500 * time.Millisecond,
+		V4:         true,
+		V6:         true,
+		Port:       port,
+		CidrPrefix: cidrPrefix,
+	}
+
+	return ipscanner.RunWarpScan(ctx, scanOpts)
 }
