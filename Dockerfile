@@ -1,7 +1,7 @@
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+FROM golang:1.23-alpine AS builder
 LABEL maintainer="nekohasekai <contact-git@sekai.icu>"
-COPY . /go/src/github.com/sagernet/sing-box
-WORKDIR /go/src/github.com/sagernet/sing-box
+COPY . /go/src/github.com/kyochikuto/sing-box-plus
+WORKDIR /go/src/github.com/kyochikuto/sing-box-plus
 ARG TARGETOS TARGETARCH
 ARG GOPROXY=""
 ENV GOPROXY ${GOPROXY}
@@ -17,11 +17,10 @@ RUN set -ex \
         -o /go/bin/sing-box \
         -ldflags "-X \"github.com/sagernet/sing-box/constant.Version=$VERSION\" -s -w -buildid=" \
         ./cmd/sing-box
-FROM --platform=$TARGETPLATFORM alpine AS dist
+FROM alpine AS dist
 LABEL maintainer="nekohasekai <contact-git@sekai.icu>"
 RUN set -ex \
     && apk upgrade \
     && apk add bash tzdata ca-certificates nftables \
     && rm -rf /var/cache/apk/*
 COPY --from=builder /go/bin/sing-box /usr/local/bin/sing-box
-ENTRYPOINT ["sing-box"]
