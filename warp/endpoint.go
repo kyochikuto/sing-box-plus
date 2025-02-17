@@ -3,13 +3,36 @@ package warp
 import (
 	"math/rand"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/sagernet/sing-box/iputils"
 )
 
-func WarpPrefixes() []netip.Prefix {
-	return []netip.Prefix{
+type Prefix int
+
+const (
+	All Prefix = iota
+	Prefix162
+	Prefix188
+	Prefix2606
+)
+
+func (p Prefix) String() string {
+	switch p {
+	case Prefix162:
+		return "162"
+	case Prefix188:
+		return "188"
+	case Prefix2606:
+		return "2606"
+	default:
+		return ""
+	}
+}
+
+func WarpPrefixes(prefix Prefix) []netip.Prefix {
+	allPrefixes := []netip.Prefix{
 		netip.MustParsePrefix("162.159.192.0/24"),
 		netip.MustParsePrefix("162.159.193.0/24"),
 		netip.MustParsePrefix("162.159.195.0/24"),
@@ -20,6 +43,20 @@ func WarpPrefixes() []netip.Prefix {
 		netip.MustParsePrefix("2606:4700:d0::/64"),
 		netip.MustParsePrefix("2606:4700:d1::/64"),
 	}
+
+	if prefix == All {
+		return allPrefixes
+	}
+
+	var filteredPrefixes []netip.Prefix
+	prefixStr := prefix.String()
+	for _, p := range allPrefixes {
+		if strings.HasPrefix(p.Addr().String(), prefixStr) {
+			filteredPrefixes = append(filteredPrefixes, p)
+		}
+	}
+
+	return filteredPrefixes
 }
 
 func RandomWarpPrefix(v4, v6 bool) netip.Prefix {
@@ -27,7 +64,7 @@ func RandomWarpPrefix(v4, v6 bool) netip.Prefix {
 		panic("Must choose a IP version for RandomWarpPrefix")
 	}
 
-	cidrs := WarpPrefixes()
+	cidrs := WarpPrefixes(All)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for {
 		cidr := cidrs[rng.Intn(len(cidrs))]

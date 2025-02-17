@@ -19,6 +19,7 @@ type WarpScanOptions struct {
 	MaxRTT     time.Duration
 	V4         bool
 	V6         bool
+	CidrPrefix warp.Prefix
 	Port       uint16
 }
 
@@ -49,7 +50,7 @@ func RunWarpScan(ctx context.Context, opts WarpScanOptions) (result IPInfo, err 
 		WithUseIPv4(opts.V4),
 		WithUseIPv6(CanConnectIPv6(googlev6DNSAddr80)),
 		WithMaxDesirableRTT(opts.MaxRTT),
-		WithCidrList(warp.WarpPrefixes()),
+		WithCidrList(warp.WarpPrefixes(opts.CidrPrefix)),
 		WithPort(opts.Port),
 	)
 
