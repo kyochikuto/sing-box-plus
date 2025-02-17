@@ -6,7 +6,7 @@ Due to significant changes and complexities introduced by each new upstream rele
 ## Cloudflare IP Scanner
 
 Scans for unblocked Cloudflare IPs (currently only WARP CIDRs).
-Enable it by setting your Wireguard peer `server`  to `warp_auto`, and also optionally enable port scanning by setting the `server_port` to `0`:
+Enable it by setting your Wireguard peer `server`  to `warp_auto`, `warp_188`, or `warp_162`, and also optionally enable port scanning by setting the `server_port` to `0`:
 
 ```json
 {
@@ -18,6 +18,7 @@ Enable it by setting your Wireguard peer `server`  to `warp_auto`, and also opti
     "private_key": "YOUR_PRIVATE_KEY",
     "peers": [
         {
+            // valid options: [warp_auto, warp_162, warp_188] or any FQDN server
             "server": "warp_auto",  // <- for WarpInWarp configs set this to the original value `engage.cloudflareclient.com` to disable ip scanner and noise generator for the tunneled warp connection
             "server_port": 2408,  // <- set to 0 to pick a random WARP port or set it to a fixed port like this to scan endpoints only with this port
             "public_key": "bmXOC+F1FxEMF9dyiK2H5\/1SUtzH0JuVo51h2wPfgyo=",
@@ -39,7 +40,7 @@ Enable it by setting your Wireguard peer `server`  to `warp_auto`, and also opti
 ## Cloudflare WARP blocking bypass
 
 Bypasses Cloudflare WARP blockings by applying certain Wireguard hacks.
-Enabled by default for WARP endpoints with `warp_auto` set as their `server` field.
+Enabled by default for WARP endpoints with `warp_*` set as their `server` field.
 
 ## TLS clientHello Packet Fragmentation
 
