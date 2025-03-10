@@ -2,6 +2,14 @@
 icon: material/alert-decagram
 ---
 
+### 1.10.81
+
+* Fix unresponsive WARP scanner on startup
+
+### 1.10.8
+
+* Add option to select WARP scanner CIDRs
+
 ### 1.10.7
 
 * Fixes and improvements

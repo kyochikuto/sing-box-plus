@@ -4,10 +4,18 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/netip"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/ipscanner"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing-box/warp"
 	dns "github.com/sagernet/sing-dns"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -21,6 +29,7 @@ type PeerConfig struct {
 	PreSharedKey   string
 	AllowedIPs     []string
 	Reserved       [3]uint8
+	TryUnblockWarp bool
 }
 
 func (c PeerConfig) GenerateIpcLines() string {
@@ -32,23 +41,91 @@ func (c PeerConfig) GenerateIpcLines() string {
 	for _, allowedIP := range c.AllowedIPs {
 		ipcLines += "\nallowed_ip=" + allowedIP
 	}
+	if c.TryUnblockWarp {
+		ipcLines += "\ntry_unblock_warp=true"
+	}
+
 	return ipcLines
 }
 
-func ParsePeers(options option.WireGuardOutboundOptions) ([]PeerConfig, error) {
+func scanWarpEndpoints(privateKey string, cidrPrefix warp.Prefix, port uint16) (ipscanner.IPInfo, error) {
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	scanOpts := ipscanner.WarpScanOptions{
+		PrivateKey: privateKey,
+		PublicKey:  warp.WarpPublicKey,
+		MaxRTT:     1000 * time.Millisecond,
+		V4:         true,
+		V6:         true,
+		CidrPrefix: cidrPrefix,
+		Port:       port,
+	}
+
+	return ipscanner.RunWarpScan(ctx, scanOpts)
+}
+
+func ParsePeers(options option.WireGuardOutboundOptions, logger log.ContextLogger) ([]PeerConfig, error) {
 	var peers []PeerConfig
 	if len(options.Peers) > 0 {
 		for peerIndex, rawPeer := range options.Peers {
 			peer := PeerConfig{
 				AllowedIPs: rawPeer.AllowedIPs,
 			}
-			destination := rawPeer.ServerOptions.Build()
-			if destination.IsFqdn() {
-				peer.destination = destination
-				peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+
+			if warp.IsPeerCloudflareWarp(rawPeer.PublicKey) {
+				switch rawPeer.ServerOptions.Server {
+				case "warp_auto":
+					logger.Info("running WARP IP scanner, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.All, rawPeer.ServerOptions.ServerPort)
+					if err != nil {
+						return nil, err
+					}
+					logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.Endpoint = bestEndpoint.AddrPort
+					peer.TryUnblockWarp = true
+				case "warp_188":
+					logger.Info("running WARP IP scanner, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix188, rawPeer.ServerOptions.ServerPort)
+					if err != nil {
+						return nil, err
+					}
+					logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.Endpoint = bestEndpoint.AddrPort
+					peer.TryUnblockWarp = true
+				case "warp_162":
+					logger.Info("running WARP IP scanner, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix162, rawPeer.ServerOptions.ServerPort)
+					if err != nil {
+						return nil, err
+					}
+					logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.Endpoint = bestEndpoint.AddrPort
+					peer.TryUnblockWarp = true
+				default:
+					destination := rawPeer.ServerOptions.Build()
+					if destination.IsFqdn() {
+						peer.destination = destination
+						peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+					} else {
+						peer.Endpoint = destination.AddrPort()
+					}
+				}
 			} else {
-				peer.Endpoint = destination.AddrPort()
+				destination := rawPeer.ServerOptions.Build()
+				if destination.IsFqdn() {
+					peer.destination = destination
+					peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+				} else {
+					peer.Endpoint = destination.AddrPort()
+				}
 			}
+
 			{
 				bytes, err := base64.StdEncoding.DecodeString(rawPeer.PublicKey)
 				if err != nil {
@@ -70,8 +147,9 @@ func ParsePeers(options option.WireGuardOutboundOptions) ([]PeerConfig, error) {
 				if len(rawPeer.Reserved) != 3 {
 					return nil, E.New("invalid reserved value for peer ", peerIndex, ", required 3 bytes, got ", len(peer.Reserved))
 				}
-				copy(peer.Reserved[:], options.Reserved)
+				copy(peer.Reserved[:], rawPeer.Reserved)
 			}
+
 			peers = append(peers, peer)
 		}
 	} else {
@@ -93,13 +171,61 @@ func ParsePeers(options option.WireGuardOutboundOptions) ([]PeerConfig, error) {
 		if addressHas6 {
 			peer.AllowedIPs = append(peer.AllowedIPs, netip.PrefixFrom(netip.IPv6Unspecified(), 0).String())
 		}
-		destination := options.ServerOptions.Build()
-		if destination.IsFqdn() {
-			peer.destination = destination
-			peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+
+		if warp.IsPeerCloudflareWarp(options.PeerPublicKey) {
+			switch options.ServerOptions.Server {
+			case "warp_auto":
+				logger.Info("running WARP IP scanner, this might take a while...")
+
+				bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.All, options.ServerOptions.ServerPort)
+				if err != nil {
+					return nil, err
+				}
+				logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+				peer.Endpoint = bestEndpoint.AddrPort
+				peer.TryUnblockWarp = true
+			case "warp_188":
+				logger.Info("running WARP IP scanner, this might take a while...")
+
+				bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix188, options.ServerOptions.ServerPort)
+				if err != nil {
+					return nil, err
+				}
+				logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+				peer.Endpoint = bestEndpoint.AddrPort
+				peer.TryUnblockWarp = true
+			case "warp_162":
+				logger.Info("running WARP IP scanner, this might take a while...")
+
+				bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix162, options.ServerOptions.ServerPort)
+				if err != nil {
+					return nil, err
+				}
+				logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+				peer.Endpoint = bestEndpoint.AddrPort
+				peer.TryUnblockWarp = true
+			default:
+				destination := options.ServerOptions.Build()
+				if destination.IsFqdn() {
+					peer.destination = destination
+					peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+				} else {
+					peer.Endpoint = destination.AddrPort()
+				}
+			}
 		} else {
-			peer.Endpoint = destination.AddrPort()
+			destination := options.ServerOptions.Build()
+			if destination.IsFqdn() {
+				peer.destination = destination
+				peer.domainStrategy = dns.DomainStrategy(options.DomainStrategy)
+			} else {
+				peer.Endpoint = destination.AddrPort()
+			}
 		}
+
 		{
 			bytes, err := base64.StdEncoding.DecodeString(options.PeerPublicKey)
 			if err != nil {
