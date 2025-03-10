@@ -21,7 +21,7 @@ require (
 	github.com/noql-net/certpool v0.0.0-20250128174907-b15afbea6eae
 	github.com/ooni/go-libtor v1.1.8
 	github.com/oschwald/maxminddb-golang v1.12.0
-	github.com/redpilllabs/wireguard-go v0.1.0
+	github.com/redpilllabs/wireguard-go v0.1.2
 	github.com/sagernet/asc-go v0.0.0-20241217030726-d563060fe4e1
 	github.com/sagernet/bbolt v0.0.0-20231014093535-ea5cb2fe9f0a
 	github.com/sagernet/cloudflare-tls v0.0.0-20231208171750-a4483c1b7cd1

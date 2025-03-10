@@ -54,7 +54,7 @@ func scanWarpEndpoints(privateKey string, cidrPrefix warp.Prefix, port uint16) (
 	scanOpts := ipscanner.WarpScanOptions{
 		PrivateKey: privateKey,
 		PublicKey:  warp.WarpPublicKey,
-		MaxRTT:     200 * time.Millisecond,
+		MaxRTT:     1000 * time.Millisecond,
 		V4:         true,
 		V6:         true,
 		CidrPrefix: cidrPrefix,

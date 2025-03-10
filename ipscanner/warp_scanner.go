@@ -61,7 +61,7 @@ func RunWarpScan(ctx context.Context, opts WarpScanOptions) (result IPInfo, err 
 
 	for {
 		ipList := scanner.GetAvailableIPs()
-		if len(ipList) > 2 {
+		if len(ipList) >= 1 {
 			bestIp, err := findMinRTT(ipList)
 			if err != nil {
 				return IPInfo{}, err
