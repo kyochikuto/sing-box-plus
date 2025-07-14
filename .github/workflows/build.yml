@@ -19,7 +19,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ^1.23
+          go-version: ^1.24
       - name: Extracting version number from changelog.md
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -158,7 +158,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ^1.23
+          go-version: ^1.24
       - name: Create tag
         run: |
           git tag ${{ env.RELEASE_TAG }} -f
