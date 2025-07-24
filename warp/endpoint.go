@@ -16,6 +16,7 @@ const (
 	Prefix162
 	Prefix188
 	Prefix2606
+	Prefix8
 )
 
 func (p Prefix) String() string {
@@ -26,6 +27,8 @@ func (p Prefix) String() string {
 		return "188"
 	case Prefix2606:
 		return "2606"
+	case Prefix8:
+		return "8"
 	default:
 		return ""
 	}
@@ -38,10 +41,10 @@ func WarpPrefixes(prefix Prefix) []netip.Prefix {
 		netip.MustParsePrefix("8.34.146.0/24"),
 		netip.MustParsePrefix("8.35.211.0/24"),
 		netip.MustParsePrefix("8.39.125.0/24"),
+		netip.MustParsePrefix("8.39.204.0/24"),
 		netip.MustParsePrefix("8.39.214.0/24"),
 		netip.MustParsePrefix("8.47.69.0/24"),
 		netip.MustParsePrefix("162.159.192.0/24"),
-		netip.MustParsePrefix("162.159.193.0/24"),
 		netip.MustParsePrefix("162.159.195.0/24"),
 		netip.MustParsePrefix("188.114.96.0/24"),
 		netip.MustParsePrefix("188.114.97.0/24"),
