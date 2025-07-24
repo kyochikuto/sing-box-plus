@@ -3,7 +3,7 @@
 ## Cloudflare IP Scanner
 
 Scans for unblocked Cloudflare IPs (currently only WARP CIDRs).
-Enable it by setting your Wireguard peer `address`  to `warp_auto`, and also optionally enable port scanning by setting the `port` to `0`:
+Enable it by setting your Wireguard peer `address`  to `warp_auto` and also optionally enable port scanning by setting the `port` to `0`. You can also limit the scanner to a specific IP range or port by settings the `address` to either of `[warp_8, warp_162, warp_188]` and the port to any port listed in [here](https://github.com/kyochikuto/sing-box-plus/blob/ab5093bd25962847927bbc084f9dfae81c053fa4/warp/endpoint.go#L86):
 
 ```json
 "endpoints": [ // <- Since sing-box v1.11 Wireguard conns are added to `endpoints`
@@ -33,7 +33,7 @@ Enable it by setting your Wireguard peer `address`  to `warp_auto`, and also opt
 ## Cloudflare WARP blocking bypass
 
 Bypasses Cloudflare WARP blockings by applying certain Wireguard hacks.
-Enabled by default for WARP endpoints with `warp_auto` set as their `address` field.
+Enabled by default for WARP endpoints with `warp_*` set as their `address` field.
 
 ## TLS clientHello Packet Fragmentation
 #### ⚠️ Note
