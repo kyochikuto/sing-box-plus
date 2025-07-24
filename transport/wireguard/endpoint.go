@@ -75,7 +75,7 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 					peer.endpoint = bestEndpoint.AddrPort
 					peer.enableWarpNoiseGen = true
 				case "warp_188":
-					options.Logger.Info("running WARP IP scanner on the 188.114.96.0/23 subnet, this might take a while...")
+					options.Logger.Info("running WARP IP scanner on the 188.114.x.x subnet, this might take a while...")
 
 					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix188, rawPeer.Endpoint.Port)
 					if err != nil {
@@ -86,9 +86,20 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 					peer.endpoint = bestEndpoint.AddrPort
 					peer.enableWarpNoiseGen = true
 				case "warp_162":
-					options.Logger.Info("running WARP IP scanner on the 162.159.192.0/23 subnet, this might take a while...")
+					options.Logger.Info("running WARP IP scanner on the 162.159.x.x subnet, this might take a while...")
 
 					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix162, rawPeer.Endpoint.Port)
+					if err != nil {
+						return nil, err
+					}
+					options.Logger.Info(fmt.Sprintf("fastest WARP endpoint available is %s with RTT of %s ", bestEndpoint.AddrPort.String(), bestEndpoint.RTT.String()))
+
+					peer.endpoint = bestEndpoint.AddrPort
+					peer.enableWarpNoiseGen = true
+				case "warp_8":
+					options.Logger.Info("running WARP IP scanner on the 8.x.x.x subnet, this might take a while...")
+
+					bestEndpoint, err := scanWarpEndpoints(options.PrivateKey, warp.Prefix8, rawPeer.Endpoint.Port)
 					if err != nil {
 						return nil, err
 					}
