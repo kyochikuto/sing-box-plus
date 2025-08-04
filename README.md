@@ -3,7 +3,7 @@
 ## Cloudflare IP Scanner
 
 Scans for unblocked Cloudflare IPs (currently only WARP CIDRs).
-Enable it by setting your Wireguard peer `address`  to `warp_auto`, and also optionally enable port scanning by setting the `port` to `0`:
+Enable it by setting your Wireguard peer `address`  to `warp_auto` and also optionally enable port scanning by setting the `port` to `0`. You can also limit the scanner to a specific IP range or port by settings the `address` to either of `[warp_8, warp_162, warp_188]` and the port to any port listed in [here](https://github.com/kyochikuto/sing-box-plus/blob/ab5093bd25962847927bbc084f9dfae81c053fa4/warp/endpoint.go#L86):
 
 ```json
 "endpoints": [ // <- Since sing-box v1.11 Wireguard conns are added to `endpoints`
@@ -33,36 +33,8 @@ Enable it by setting your Wireguard peer `address`  to `warp_auto`, and also opt
 ## Cloudflare WARP blocking bypass
 
 Bypasses Cloudflare WARP blockings by applying certain Wireguard hacks.
-Enabled by default for WARP endpoints with `warp_auto` set as their `address` field.
+Enabled by default for WARP endpoints with `warp_*` set as their `address` field.
 
-## TLS clientHello Packet Fragmentation
-#### ⚠️ Note
-TLS fragmentation is deprecated in favor the upcoming implementation in version 1.12 by upstream, keep an eye on this space!
-
-~~ Fragments TLS ClientHello packets in multiple segments, making it harder to drop connections based on SNI filtering.
-Enable it by adding the `tls_fragment` entry to any outbound connection: ~~
-
-```json
-...
-"outbounds": [
-        {
-            "type": "direct",
-            "tag": "direct"
-        },
-        {
-            // DEPRECATED, new version coming in v1.12
-            "type": "direct",
-            "tag": "fragment",
-            "tcp_fast_open": false,
-            "tls_fragment": {
-                "enabled": true,
-                "size": "20-100",
-                "sleep": "0-2"
-            }
-        },
-]
-...
-```
 
 ## Example configurations
 
@@ -72,18 +44,9 @@ See the `examples` directory for example configuration files.
 
 Docker images are available for `linux/amd64` and `linux/386` architectures at `ghcr.io/kyochikuto/sing-box-plus:latest`.
 
-## Fork License
 
-```text
-Copyright (C) 2024 by Kyōchikutō | キョウチクトウ 
-
-This fork includes the following changes:
-
-* [TLS Handshake Fragmentation]
-* [WARP Unblocker]
-```
-
-Credits to [@bepass-org](https://github.com/bepass-org), [@markpash](https://github.com/markpash), and [@GFW-knocker](https://github.com/GFW-knocker)
+## Credits
+Credits to [@bepass-org](https://github.com/bepass-org), [@markpash](https://github.com/markpash), and [@GFW-knocker](https://github.com/GFW-knocker) for the original TLS fragmentation idea and WARP noise generator.
 
 ## License
 
