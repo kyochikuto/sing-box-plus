@@ -10,6 +10,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/redpilllabs/wireguard-go/conn"
+	"github.com/redpilllabs/wireguard-go/device"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -17,8 +20,6 @@ import (
 	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
-	"github.com/sagernet/wireguard-go/conn"
-	"github.com/sagernet/wireguard-go/device"
 
 	"go4.org/netipx"
 )
@@ -79,8 +80,39 @@ func NewEndpoint(options EndpointOptions) (*Endpoint, error) {
 			}
 			copy(peer.reserved[:], rawPeer.Reserved[:])
 		}
+
+		peer.enableWarpIpScanner = rawPeer.WarpScanner.EnableIpScanner
+		peer.enableWarpPortScanner = rawPeer.WarpScanner.EnablePortScanner
+		for _, prefix := range rawPeer.WarpScanner.Cidrs {
+			peer.warpScannerCidrs = append(peer.warpScannerCidrs, prefix)
+		}
+
+		peer.enableWarpNoiseGen = rawPeer.WarpNoise.Enable
+		if peer.enableWarpNoiseGen {
+			peer.warpNoisePacketCount = rawPeer.WarpNoise.PacketCount
+			if peer.warpNoisePacketCount.Start == 0 {
+				peer.warpNoisePacketCount.Start = 10
+				options.Logger.WarnContext(options.Context, "auto setting minimum warp noise generator's packet count to %v", peer.warpNoisePacketCount.Start)
+			}
+			if peer.warpNoisePacketCount.End == 0 {
+				peer.warpNoisePacketCount.End = 20
+				options.Logger.WarnContext(options.Context, "auto setting maximum warp noise generator's packet count to %v", peer.warpNoisePacketCount.End)
+			}
+
+			peer.warpNoisePacketDelay = rawPeer.WarpNoise.PacketDelay
+			if peer.warpNoisePacketDelay.Start == 0 {
+				peer.warpNoisePacketDelay.Start = 5
+				options.Logger.WarnContext(options.Context, "auto setting minimum warp noise generator's packet delay to %v", peer.warpNoisePacketDelay.Start)
+			}
+			if peer.warpNoisePacketDelay.End == 0 {
+				peer.warpNoisePacketDelay.End = 10
+				options.Logger.WarnContext(options.Context, "auto setting maximum warp noise generator's packet delay to %v", peer.warpNoisePacketDelay.End)
+			}
+		}
+
 		peers = append(peers, peer)
 	}
+
 	var allowedPrefixBuilder netipx.IPSetBuilder
 	for _, peer := range options.Peers {
 		for _, prefix := range peer.AllowedIPs {
@@ -191,6 +223,7 @@ func (e *Endpoint) Start(resolve bool) error {
 	if e.pause != nil {
 		e.pauseCallback = e.pause.RegisterCallback(e.onPauseUpdated)
 	}
+
 	return nil
 }
 
@@ -228,13 +261,19 @@ func (e *Endpoint) onPauseUpdated(event int) {
 }
 
 type peerConfig struct {
-	destination     M.Socksaddr
-	endpoint        netip.AddrPort
-	publicKeyHex    string
-	preSharedKeyHex string
-	allowedIPs      []netip.Prefix
-	keepalive       uint16
-	reserved        [3]uint8
+	destination           M.Socksaddr
+	endpoint              netip.AddrPort
+	publicKeyHex          string
+	preSharedKeyHex       string
+	allowedIPs            []netip.Prefix
+	keepalive             uint16
+	reserved              [3]uint8
+	enableWarpIpScanner   bool
+	enableWarpPortScanner bool
+	enableWarpNoiseGen    bool
+	warpScannerCidrs      []netip.Prefix
+	warpNoisePacketCount  option.IntRange
+	warpNoisePacketDelay  option.IntRange
 }
 
 func (c peerConfig) GenerateIpcLines() string {
@@ -251,5 +290,29 @@ func (c peerConfig) GenerateIpcLines() string {
 	if c.keepalive > 0 {
 		ipcLines += "\npersistent_keepalive_interval=" + F.ToString(c.keepalive)
 	}
+	if c.reserved != [3]uint8{} {
+		reservedStr := fmt.Sprintf("%02x%02x%02x", c.reserved, c.reserved[1], c.reserved[2])
+		ipcLines += "\nreserved=" + reservedStr
+	}
+	if c.enableWarpIpScanner {
+		ipcLines += "\nenable_warp_ip_scanner=true"
+	}
+	if c.enableWarpPortScanner {
+		ipcLines += "\nenable_warp_port_scanner=true"
+	}
+	for _, warpCidr := range c.warpScannerCidrs {
+		fmt.Printf("adding a new prefix to ipc: %v", warpCidr.String())
+		ipcLines += "\nwarp_scanner_cidr=" + warpCidr.String()
+	}
+	if c.enableWarpNoiseGen {
+		ipcLines += "\nenable_warp_noise_gen=true"
+	}
+	if c.warpNoisePacketCount.End != 0 {
+		ipcLines += "\nwarp_noise_packet_count=" + c.warpNoisePacketCount.String()
+	}
+	if c.warpNoisePacketDelay.End != 0 {
+		ipcLines += "\nwarp_noise_packet_delay=" + c.warpNoisePacketDelay.String()
+	}
+
 	return ipcLines
 }

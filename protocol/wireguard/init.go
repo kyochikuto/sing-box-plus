@@ -1,8 +1,8 @@
 package wireguard
 
 import (
+	"github.com/redpilllabs/wireguard-go/conn"
 	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/wireguard-go/conn"
 )
 
 func init() {

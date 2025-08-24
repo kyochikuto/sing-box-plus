@@ -97,6 +97,8 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 				AllowedIPs:                  it.AllowedIPs,
 				PersistentKeepaliveInterval: it.PersistentKeepaliveInterval,
 				Reserved:                    it.Reserved,
+				WarpScanner:                 it.WarpScanner,
+				WarpNoise:                   it.WarpNoise,
 			}
 		}),
 		Workers: options.Workers,
