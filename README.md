@@ -1,20 +1,21 @@
-> Sponsored by [Warp](https://go.warp.dev/sing-box), built for coding with multiple AI agents
-
-<a href="https://go.warp.dev/sing-box">
-<img alt="Warp sponsorship" width="400" src="https://github.com/warpdotdev/brand-assets/raw/refs/heads/main/Github/Sponsor/Warp-Github-LG-02.png">
-</a>
-
----
-
-# sing-box
+# sing-box-plus
 
 The universal proxy platform.
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/sing-box.svg)](https://repology.org/project/sing-box/versions)
+## Plus Features
+
+- WARP Endpoint Scanner
+- WARP Handshake Noise Generator
+
+See the `examples` directory for usage examples.
 
 ## Documentation
 
 https://sing-box.sagernet.org
+
+## Credits
+
+Credits to [@bepass-org](https://github.com/bepass-org), [@markpash](https://github.com/markpash), and [@GFW-knocker](https://github.com/GFW-knocker) for their work on the WARP scanner and noise generator.
 
 ## License
 
