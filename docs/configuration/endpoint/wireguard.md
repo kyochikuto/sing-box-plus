@@ -25,7 +25,19 @@ icon: material/new-box
       "pre_shared_key": "",
       "allowed_ips": [],
       "persistent_keepalive_interval": 0,
-      "reserved": [0, 0, 0]
+      "reserved": [0, 0, 0],
+      "warp_scanner": {
+        "enable_ip_scanner": false,
+        "enable_port_scanner": false,
+        "cidrs": [
+          "8.6.112.0/24"
+        ]
+      },
+      "warp_noise": {
+        "enable": false,
+        "packet_count": "30-50",
+        "packet_delay": "10-20"
+      }
     }
   ],
   "udp_timeout": "",
@@ -115,6 +127,40 @@ Disabled by default.
 #### peers.reserved
 
 WireGuard reserved field bytes.
+
+### WARP Scanner Fields
+
+Scans for unblocked Cloudflare WARP endpoints and ports.
+
+#### enable_ip_scanner
+
+Enable scanning for working Cloudflare WARP endpoint IPs.
+
+#### enable_port_scanner
+
+Enable scanning for working Cloudflare WARP endpoint ports.
+
+#### cidrs
+
+List of CIDR prefixes to be scanned. If empty, all IPv4 and IPv6 addresses will be scanned.
+
+### WARP Handshake Noise Generator Fields
+
+#### enable
+
+Enable WARP handshake noise generator, sends fake QUIC packets before a handshake to bypass handshake detection.
+
+#### packet_count
+
+Number of fake QUIC packets to send. This can be either a fixed number or a range.
+
+Valid examples: `10`, `10-20`
+
+#### packet_delay
+
+Delay between fake QUIC packets, in milliseconds. This can be either a fixed number or a range.
+
+Valid examples: `10`, `10-20`
 
 #### udp_timeout
 
