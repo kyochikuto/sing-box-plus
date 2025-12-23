@@ -1,12 +1,14 @@
 module github.com/sagernet/sing-box
 
-go 1.23.1
+go 1.24.0
 
 require (
 	github.com/anytls/sing-anytls v0.0.11
 	github.com/caddyserver/certmagic v0.23.0
 	github.com/coder/websocket v1.8.13
 	github.com/cretz/bine v0.2.0
+	github.com/flynn/noise v1.1.0
+	github.com/fractal-networking/wireguard-go v0.0.0-20250826133224-cc6e5acd6832
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/render v1.0.3
 	github.com/godbus/dbus/v5 v5.1.1-0.20230522191255-76236955d466
@@ -37,7 +39,6 @@ require (
 	github.com/sagernet/sing-vmess v0.2.7
 	github.com/sagernet/smux v1.5.34-mod.2
 	github.com/sagernet/tailscale v1.80.3-sing-box-1.12-mod.2
-	github.com/sagernet/wireguard-go v0.0.1-beta.7
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
@@ -55,7 +56,7 @@ require (
 	howett.net/plist v1.0.1
 )
 
-//replace github.com/sagernet/sing => ../sing
+// replace github.com/fractal-networking/wireguard-go => ../wireguard-go
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -107,6 +108,7 @@ require (
 	github.com/safchain/ethtool v0.3.0 // indirect
 	github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a // indirect
 	github.com/sagernet/nftables v0.3.0-beta.4 // indirect
+	github.com/sagernet/wireguard-go v0.0.1-beta.4 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/tailscale/certstore v0.1.1-0.20231202035212-d3fa0460f47e // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
