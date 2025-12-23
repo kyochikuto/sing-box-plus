@@ -14,7 +14,7 @@ import (
 	"github.com/sagernet/sing-box/common/sniff"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -40,8 +40,6 @@ func NewRuleAction(ctx context.Context, logger logger.ContextLogger, action opti
 				UDPDisableDomainUnmapping: action.RouteOptions.UDPDisableDomainUnmapping,
 				UDPConnect:                action.RouteOptions.UDPConnect,
 				TLSFragment:               action.RouteOptions.TLSFragment,
-				TLSFragmentFallbackDelay:  time.Duration(action.RouteOptions.TLSFragmentFallbackDelay),
-				TLSRecordFragment:         action.RouteOptions.TLSRecordFragment,
 			},
 		}, nil
 	case C.RuleActionTypeRouteOptions:
@@ -54,8 +52,6 @@ func NewRuleAction(ctx context.Context, logger logger.ContextLogger, action opti
 			UDPConnect:                action.RouteOptionsOptions.UDPConnect,
 			UDPTimeout:                time.Duration(action.RouteOptionsOptions.UDPTimeout),
 			TLSFragment:               action.RouteOptionsOptions.TLSFragment,
-			TLSFragmentFallbackDelay:  time.Duration(action.RouteOptionsOptions.TLSFragmentFallbackDelay),
-			TLSRecordFragment:         action.RouteOptionsOptions.TLSRecordFragment,
 		}, nil
 	case C.RuleActionTypeDirect:
 		directDialer, err := dialer.New(ctx, option.DialerOptions(action.DirectOptions), false)
@@ -169,9 +165,7 @@ type RuleActionRouteOptions struct {
 	UDPDisableDomainUnmapping bool
 	UDPConnect                bool
 	UDPTimeout                time.Duration
-	TLSFragment               bool
-	TLSFragmentFallbackDelay  time.Duration
-	TLSRecordFragment         bool
+	TLSFragment               option.OutboundTLSFragmentOptions
 }
 
 func (r *RuleActionRouteOptions) Type() string {
@@ -211,14 +205,8 @@ func (r *RuleActionRouteOptions) Descriptions() []string {
 	if r.UDPTimeout > 0 {
 		descriptions = append(descriptions, "udp-timeout")
 	}
-	if r.TLSFragment {
+	if r.TLSFragment.Enabled {
 		descriptions = append(descriptions, "tls-fragment")
-	}
-	if r.TLSFragmentFallbackDelay > 0 {
-		descriptions = append(descriptions, F.ToString("tls-fragment-fallback-delay=", r.TLSFragmentFallbackDelay.String()))
-	}
-	if r.TLSRecordFragment {
-		descriptions = append(descriptions, "tls-record-fragment")
 	}
 	return descriptions
 }

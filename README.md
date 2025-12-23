@@ -1,20 +1,20 @@
-> Sponsored by [Warp](https://go.warp.dev/sing-box), built for coding with multiple AI agents
-
-<a href="https://go.warp.dev/sing-box">
-<img alt="Warp sponsorship" width="400" src="https://github.com/warpdotdev/brand-assets/raw/refs/heads/main/Github/Sponsor/Warp-Github-LG-02.png">
-</a>
-
----
-
-# sing-box
+# sing-box-plus
 
 The universal proxy platform.
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/sing-box.svg)](https://repology.org/project/sing-box/versions)
+## Plus Features
+
+- Enhanced TLS Fragmentation (Customizable version from Xray-Core)
+
+See the `examples` directory for usage examples.
 
 ## Documentation
 
 https://sing-box.sagernet.org
+
+## Credits
+
+Credits to [@GFW-knocker](https://github.com/GFW-knocker) and [@patterniha](https://github.com/patterniha) for their work on the TLS fragmentation implementation.
 
 ## License
 
