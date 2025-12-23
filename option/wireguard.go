@@ -27,6 +27,8 @@ type WireGuardPeer struct {
 	AllowedIPs                  badoption.Listable[netip.Prefix] `json:"allowed_ips,omitempty"`
 	PersistentKeepaliveInterval uint16                           `json:"persistent_keepalive_interval,omitempty"`
 	Reserved                    []uint8                          `json:"reserved,omitempty"`
+	WarpScanner                 WarpScannerOptions               `json:"warp_scanner"`
+	WarpNoise                   WarpNoiseOptions                 `json:"warp_noise"`
 }
 
 type LegacyWireGuardOutboundOptions struct {
@@ -52,4 +54,16 @@ type LegacyWireGuardPeer struct {
 	PreSharedKey string                           `json:"pre_shared_key,omitempty"`
 	AllowedIPs   badoption.Listable[netip.Prefix] `json:"allowed_ips,omitempty"`
 	Reserved     []uint8                          `json:"reserved,omitempty"`
+}
+
+type WarpScannerOptions struct {
+	EnableIpScanner   bool                             `json:"enable_ip_scanner,omitempty"`
+	EnablePortScanner bool                             `json:"enable_port_scanner,omitempty"`
+	Cidrs             badoption.Listable[netip.Prefix] `json:"cidrs,omitempty"`
+}
+
+type WarpNoiseOptions struct {
+	Enable      bool     `json:"enable,omitempty"`
+	PacketCount IntRange `json:"packet_count,omitempty"`
+	PacketDelay IntRange `json:"packet_delay,omitempty"`
 }
