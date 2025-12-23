@@ -4,15 +4,15 @@ icon: material/alert-decagram
 
 !!! quote "Changes in sing-box 1.12.0"
 
-    :material-plus: [fragment](#fragment)  
-    :material-plus: [fragment_fallback_delay](#fragment_fallback_delay)  
-    :material-plus: [record_fragment](#record_fragment)  
-    :material-delete-clock: [ech.pq_signature_schemes_enabled](#pq_signature_schemes_enabled)  
+    :material-plus: [fragment](#fragment)
+    :material-plus: [fragment_fallback_delay](#fragment_fallback_delay)
+    :material-plus: [record_fragment](#record_fragment)
+    :material-delete-clock: [ech.pq_signature_schemes_enabled](#pq_signature_schemes_enabled)
     :material-delete-clock: [ech.dynamic_record_sizing_disabled](#dynamic_record_sizing_disabled)
 
 !!! quote "Changes in sing-box 1.10.0"
 
-    :material-alert-decagram: [utls](#utls)  
+    :material-alert-decagram: [utls](#utls)
 
 ### Inbound
 
@@ -50,7 +50,7 @@ icon: material/alert-decagram
     "key_path": "",
 
     // Deprecated
-    
+
     "pq_signature_schemes_enabled": false,
     "dynamic_record_sizing_disabled": false
   },
@@ -85,9 +85,13 @@ icon: material/alert-decagram
   "cipher_suites": [],
   "certificate": "",
   "certificate_path": "",
-  "fragment": false,
-  "fragment_fallback_delay": "",
-  "record_fragment": false,
+  "fragment": {
+    "enabled": false,
+    "packets": "",
+    "length": "",
+    "interval": "",
+    "max_splits": 0
+  },
   "ech": {
     "enabled": false,
     "config": [],
@@ -111,30 +115,30 @@ icon: material/alert-decagram
 
 TLS version values:
 
-* `1.0`
-* `1.1`
-* `1.2`
-* `1.3`
+- `1.0`
+- `1.1`
+- `1.2`
+- `1.3`
 
 Cipher suite values:
 
-* `TLS_RSA_WITH_AES_128_CBC_SHA`
-* `TLS_RSA_WITH_AES_256_CBC_SHA`
-* `TLS_RSA_WITH_AES_128_GCM_SHA256`
-* `TLS_RSA_WITH_AES_256_GCM_SHA384`
-* `TLS_AES_128_GCM_SHA256`
-* `TLS_AES_256_GCM_SHA384`
-* `TLS_CHACHA20_POLY1305_SHA256`
-* `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA`
-* `TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA`
-* `TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA`
-* `TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA`
-* `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`
-* `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384`
-* `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`
-* `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`
-* `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256`
-* `TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256`
+- `TLS_RSA_WITH_AES_128_CBC_SHA`
+- `TLS_RSA_WITH_AES_256_CBC_SHA`
+- `TLS_RSA_WITH_AES_128_GCM_SHA256`
+- `TLS_RSA_WITH_AES_256_GCM_SHA384`
+- `TLS_AES_128_GCM_SHA256`
+- `TLS_AES_256_GCM_SHA384`
+- `TLS_CHACHA20_POLY1305_SHA256`
+- `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA`
+- `TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA`
+- `TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA`
+- `TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA`
+- `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`
+- `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384`
+- `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`
+- `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`
+- `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256`
+- `TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256`
 
 !!! note ""
 
@@ -231,7 +235,7 @@ The path to the server private key, in PEM format.
 ==Client only==
 
 !!! failure ""
-    
+
     There is no evidence that GFW detects and blocks servers based on TLS client fingerprinting, and using an imperfect emulation that has not been security reviewed could pose security risks.
 
 uTLS is a fork of "crypto/tls", which provides ClientHello fingerprinting resistance.
@@ -242,22 +246,22 @@ Available fingerprint values:
 
     Some legacy chrome fingerprints have been removed and will fallback to chrome:
 
-    :material-close: chrome_psk  
-    :material-close: chrome_psk_shuffle  
-    :material-close: chrome_padding_psk_shuffle  
-    :material-close: chrome_pq  
+    :material-close: chrome_psk
+    :material-close: chrome_psk_shuffle
+    :material-close: chrome_padding_psk_shuffle
+    :material-close: chrome_pq
     :material-close: chrome_pq_psk
 
-* chrome
-* firefox
-* edge
-* safari
-* 360
-* qq
-* ios
-* android
-* random
-* randomized
+- chrome
+- firefox
+- edge
+- safari
+- 360
+- qq
+- ios
+- android
+- random
+- randomized
 
 Chrome fingerprint will be used if empty.
 
@@ -319,43 +323,75 @@ The path to ECH configuration, in PEM format.
 
 If empty, load from DNS will be attempted.
 
-#### fragment
+### Fragment Fields
 
 !!! question "Since sing-box 1.12.0"
 
 ==Client only==
 
-Fragment TLS handshakes to bypass firewalls.
+Fragment TLS handshakes to bypass TLS-based firewalls.
 
-This feature is intended to circumvent simple firewalls based on **plaintext packet matching**,
-and should not be used to circumvent real censorship.
-
-Due to poor performance, try `record_fragment` first, and only apply to server names known to be blocked.
-
-On Linux, Apple platforms, (administrator privileges required) Windows,
-the wait time can be automatically detected. Otherwise, it will fall back to
-waiting for a fixed time specified by `fragment_fallback_delay`.
-
-In addition, if the actual wait time is less than 20ms, it will also fall back to waiting for a fixed time,
-because the target is considered to be local or behind a transparent proxy.
-
-#### fragment_fallback_delay
+#### enabled
 
 !!! question "Since sing-box 1.12.0"
 
 ==Client only==
 
-The fallback value used when TLS segmentation cannot automatically determine the wait time.
+Whether to enable TLS fragmentation.
 
-`500ms` is used by default.
+Default is `false`
 
-#### record_fragment
+#### packets
 
 !!! question "Since sing-box 1.12.0"
 
 ==Client only==
 
-Fragment TLS handshake into multiple TLS records to bypass firewalls.
+The sequence of packets to fragment in a TLS handshake, this can be a single packet number or a range indicating a sequence of packets.
+
+Valid examples: `"0"`, `"1"`, `"0-1"`, `"1-3"`
+
+Default is `"0"`
+
+#### length
+
+!!! question "Since sing-box 1.12.0"
+
+==Client only==
+
+The length of payload in each fragment, this can be a fixed value or a range of numbers from each a random number will be used.
+
+Valid examples: `"1"`, `"1-517"`
+
+Default is `"1-517"`
+
+!!! note ""
+
+    Setting this to `"0"` will disable fragmentation.
+
+#### interval
+
+!!! question "Since sing-box 1.12.0"
+
+==Client only==
+
+The interval to wait between writing fragments in milliseconds, this can be a fixed value or a range of numbers from each a random number will be used.
+
+Valid examples: `"1"`, `"1-517"`
+
+Default is `"0"`
+
+#### max_splits
+
+!!! question "Since sing-box 1.12.0"
+
+==Client only==
+
+The index to the last byte in a TLS packet payload for which fragmentation is allowed. For example settings this to `517` will split the payload into N fragments based on prior settings and from 517th byte forward, a single fragment will be created.
+
+Valid value include any positive integer in the range [0-65535]
+
+Default is `517`
 
 ### ACME Fields
 
@@ -384,7 +420,7 @@ The email address to use when creating or selecting an existing ACME server acco
 The ACME CA provider to use.
 
 | Value                   | Provider      |
-|-------------------------|---------------|
+| ----------------------- | ------------- |
 | `letsencrypt (default)` | Let's Encrypt |
 | `zerossl`               | ZeroSSL       |
 | `https://...`           | Custom        |
