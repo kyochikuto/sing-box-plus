@@ -16,6 +16,10 @@ The universal proxy platform.
 
 https://sing-box.sagernet.org
 
+## Docker
+
+Docker images are available for `linux/amd64` and `linux/386` architectures at `ghcr.io/kyochikuto/sing-box-plus:latest`.
+
 ## License
 
 ```
