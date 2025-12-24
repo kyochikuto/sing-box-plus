@@ -14,10 +14,16 @@ See the `examples` directory for usage examples.
 
 https://sing-box.sagernet.org
 
+<<<<<<< HEAD
 ## Credits
 
 Credits to [@GFW-knocker](https://github.com/GFW-knocker) and [@patterniha](https://github.com/patterniha) for their work on the TLS fragmentation implementation.
 Credits to [@bepass-org](https://github.com/bepass-org), [@markpash](https://github.com/markpash), and [@GFW-knocker](https://github.com/GFW-knocker) for their work on the WARP scanner and noise generator.
+=======
+## Docker
+
+Docker images are available for `linux/amd64` and `linux/386` architectures at `ghcr.io/kyochikuto/sing-box-plus:latest`.
+>>>>>>> github-actions
 
 ## License
 
