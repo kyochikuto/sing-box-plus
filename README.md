@@ -14,6 +14,10 @@ See the `examples` directory for usage examples.
 
 https://sing-box.sagernet.org
 
+## Docker
+
+Docker images are available for `linux/amd64` and `linux/386` architectures at `ghcr.io/kyochikuto/sing-box-plus:latest`.
+
 ## Credits
 
 Credits to [@GFW-knocker](https://github.com/GFW-knocker) and [@patterniha](https://github.com/patterniha) for their work on the TLS fragmentation implementation.
