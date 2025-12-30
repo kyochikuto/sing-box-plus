@@ -3,7 +3,7 @@
   "log": {
     "disabled": false,
     "level": "debug",
-    "timestamp": true,
+    "timestamp": true
   },
   "dns": {
     "servers": [
@@ -13,15 +13,15 @@
         "server": "8.8.8.8",
         "server_port": 443,
         "domain_resolver": {
-          "server": "google-dns",
+          "server": "google-dns"
         },
-        "path": "/dns-query",
+        "path": "/dns-query"
       },
       {
         "tag": "google-dns",
         "type": "udp",
         "server": "8.8.8.8",
-        "server_port": 53,
+        "server_port": 53
       },
       {
         "tag": "cloudflare-doh",
@@ -29,24 +29,26 @@
         "server": "1.1.1.1",
         "server_port": 443,
         "domain_resolver": {
-          "server": "google-dns",
+          "server": "google-dns"
         },
-        "path": "/dns-query",
+        "path": "/dns-query"
       },
       {
         "tag": "local-dns",
-        "type": "local",
-      },
+        "type": "local"
+      }
     ],
     "rules": [
       {
-        "domain_suffix": [".ir"],
+        "domain_suffix": [
+          ".ir"
+        ],
         "action": "route",
-        "server": "local-dns",
-      },
+        "server": "local-dns"
+      }
     ],
     "strategy": "ipv4_only",
-    "final": "google-doh",
+    "final": "google-doh"
   },
   "route": {
     "rule_set": [
@@ -56,16 +58,24 @@
         "rules": [
           {
             "domain_regex": [
-              "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+cloudflare-dns\\.com",
-            ],
+              "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+cloudflare-dns\\.com"
+            ]
           },
           {
-            "domain": ["dns.google", "one.one.one.one"],
+            "domain": [
+              "dns.google",
+              "one.one.one.one"
+            ]
           },
           {
-            "ip_cidr": ["1.1.1.0/24", "1.0.0.0/24", "8.8.8.8/32", "8.8.4.4/32"],
-          },
-        ],
+            "ip_cidr": [
+              "1.1.1.0/24",
+              "1.0.0.0/24",
+              "8.8.8.8/32",
+              "8.8.4.4/32"
+            ]
+          }
+        ]
       },
       {
         "type": "inline",
@@ -77,26 +87,29 @@
               "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*youtu\\.be",
               "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*ytimg\\.com",
               "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*ggpht\\.com",
-              "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*googlevideo\\.com",
-            ],
+              "(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)*googlevideo\\.com"
+            ]
           },
           {
             "domain": [
               "youtube-ui.l.google.com",
               "youtubei.googleapis.com",
-              "youtubei-ac.googleapis.com",
-            ],
-          },
-        ],
-      },
+              "youtubei-ac.googleapis.com"
+            ]
+          }
+        ]
+      }
     ],
     "rules": [
       {
         "action": "sniff",
-        "timeout": "1s",
+        "timeout": "1s"
       },
       {
-        "rule_set": ["dns-servers", "youtube"],
+        "rule_set": [
+          "dns-servers",
+          "youtube"
+        ],
         "action": "route-options",
         "tls_fragment": {
           // Routing entries TLS fragmentation is wrapped in a `tls_fragment` object as opposed to `fragment` in outbound TLS (see outbounds below).
@@ -105,41 +118,46 @@
           "packets": "1", // The sequence of packets to fragment in a TLS handshake, this can be a single packet number or a range indicating a sequence of packets.
           "length": "1", // The length of payload in each fragment, this can be a fixed value or a range of numbers from each a random number will be used. Default is `"1-517"`
           "interval": "3-4", // The interval to wait between writing fragments in milliseconds, this can be a fixed value or a range of numbers from each a random number will be used.
-          "max_splits": 517, //The index to the last byte in a TLS packet payload for which fragmentation is allowed. For example settings this to `517` will split the payload into N fragments based on prior settings and from 517th byte forward, a single fragment will be created.
-        },
+          "max_splits": 517 //The index to the last byte in a TLS packet payload for which fragmentation is allowed. For example settings this to `517` will split the payload into N fragments based on prior settings and from 517th byte forward, a single fragment will be created.
+        }
       },
       {
-        "rule_set": ["dns-servers", "youtube"],
+        "rule_set": [
+          "dns-servers",
+          "youtube"
+        ],
         "action": "route",
-        "outbound": "direct",
+        "outbound": "direct"
       },
       {
         "protocol": "dns",
-        "action": "hijack-dns",
+        "action": "hijack-dns"
       },
       {
-        "inbound": ["default-in"],
+        "inbound": [
+          "default-in"
+        ],
         "action": "route",
-        "outbound": "direct",
-      },
+        "outbound": "direct"
+      }
     ],
     "default_domain_resolver": {
-      "server": "google-doh",
+      "server": "google-doh"
     },
-    "final": "cloudflare-workers-out",
+    "final": "cloudflare-workers-out"
   },
   "inbounds": [
     {
       "type": "mixed",
       "tag": "default-in",
       "listen_port": 1080,
-      "sniff": true,
-    },
+      "sniff": true
+    }
   ],
   "outbounds": [
     {
       "type": "direct",
-      "tag": "direct",
+      "tag": "direct"
     },
     {
       "type": "vless",
@@ -151,11 +169,13 @@
       "tls": {
         "enabled": true,
         "server_name": "yourdomain.workers.dev",
-        "alpn": ["http/1.1"],
+        "alpn": [
+          "http/1.1"
+        ],
         "min_version": "1.3",
         "utls": {
           "enabled": true,
-          "fingerprint": "chrome",
+          "fingerprint": "chrome"
         },
         "fragment": {
           // Oubound TLS Fragmentation is wrapped in a `fragment` object as opposed to `tls_fragment` in rule items.
@@ -164,16 +184,16 @@
           "packets": "1",
           "length": "1",
           "interval": "3-4",
-          "max_splits": 517,
-        },
+          "max_splits": 517
+        }
       },
       "transport": {
         "type": "ws",
         "path": "/?ed-2048",
         "headers": {
-          "Host": "yourdomain.workers.dev",
-        },
-      },
-    },
-  ],
+          "Host": "yourdomain.workers.dev"
+        }
+      }
+    }
+  ]
 }
