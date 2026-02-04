@@ -73,9 +73,7 @@ type InboundContext struct {
 	UDPDisableDomainUnmapping bool
 	UDPConnect                bool
 	UDPTimeout                time.Duration
-	TLSFragment               bool
-	TLSFragmentFallbackDelay  time.Duration
-	TLSRecordFragment         bool
+	TLSFragment               option.OutboundTLSFragmentOptions
 
 	NetworkStrategy     *C.NetworkStrategy
 	NetworkType         []C.InterfaceType

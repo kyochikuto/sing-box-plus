@@ -1,136 +1,174 @@
 package tf
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
-	"math/rand"
 	"net"
-	"strings"
 	"time"
 
-	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/option"
 	N "github.com/sagernet/sing/common/network"
-
-	"golang.org/x/net/publicsuffix"
 )
 
 type Conn struct {
 	net.Conn
-	tcpConn            *net.TCPConn
-	ctx                context.Context
-	firstPacketWritten bool
-	splitPacket        bool
-	splitRecord        bool
-	fallbackDelay      time.Duration
+	tcpConn       *net.TCPConn
+	ctx           context.Context
+	packetCounter uint64
+	packets       option.IntRange
+	length        option.IntRange
+	interval      option.IntRange
+	maxSplits     uint16
 }
 
-func NewConn(conn net.Conn, ctx context.Context, splitPacket bool, splitRecord bool, fallbackDelay time.Duration) *Conn {
-	if fallbackDelay == 0 {
-		fallbackDelay = C.TLSFragmentFallbackDelay
-	}
+func NewConn(conn net.Conn, ctx context.Context, packets option.IntRange, length option.IntRange, interval option.IntRange, maxSplits uint16) *Conn {
 	tcpConn, _ := N.UnwrapReader(conn).(*net.TCPConn)
+	if maxSplits == 0 {
+		maxSplits = 517
+	}
+	if length.Min == 0 && length.Max == 0 {
+		length.Min, length.Max = 1, 517
+	}
 	return &Conn{
-		Conn:          conn,
-		tcpConn:       tcpConn,
-		ctx:           ctx,
-		splitPacket:   splitPacket,
-		splitRecord:   splitRecord,
-		fallbackDelay: fallbackDelay,
+		Conn:      conn,
+		tcpConn:   tcpConn,
+		ctx:       ctx,
+		packets:   packets,
+		length:    length,
+		interval:  interval,
+		maxSplits: maxSplits,
 	}
 }
 
 func (c *Conn) Write(b []byte) (n int, err error) {
-	if !c.firstPacketWritten {
-		defer func() {
-			c.firstPacketWritten = true
-		}()
-		serverName := IndexTLSServerName(b)
-		if serverName != nil {
-			if c.splitPacket {
-				if c.tcpConn != nil {
-					err = c.tcpConn.SetNoDelay(true)
+	if c.length.Max == 0 {
+		return c.Conn.Write(b)
+	}
+
+	c.packetCounter++
+
+	if c.packets.Min == 0 && c.packets.Max == 1 {
+		if c.packetCounter != 1 || len(b) <= 5 || b[0] != 22 {
+			return c.Conn.Write(b)
+		}
+
+		// Parse TLS record length
+		recordLen := 5 + (int(b[3])<<8 | int(b[4]))
+		if len(b) < recordLen {
+			// Maybe already fragmented somehow
+			return c.Conn.Write(b)
+		}
+
+		// Enable TCP_NODELAY for immediate sending
+		if c.tcpConn != nil {
+			err = c.tcpConn.SetNoDelay(true)
+			if err != nil {
+				return
+			}
+			defer c.tcpConn.SetNoDelay(false)
+		}
+
+		// Extract the handshake data (without the 5-byte header)
+		data := b[5:recordLen]
+		buff := make([]byte, 2048)
+		var hello []byte
+		var splitCount uint16
+
+		for from := 0; ; {
+			// Calculate fragment size
+			to := from + c.length.Random()
+			splitCount++
+
+			// Check if we've reached the end or max splits
+			if to > len(data) || (c.maxSplits > 0 && splitCount >= c.maxSplits) {
+				to = len(data)
+			}
+
+			l := to - from
+
+			// Ensure buffer is large enough
+			if 5+l > len(buff) {
+				buff = make([]byte, 5+l)
+			}
+
+			// Build TLS record: copy header, update length, add fragment data
+			copy(buff[:3], b[:3]) // Copy record type and version
+			copy(buff[5:], data[from:to])
+			from = to
+
+			// Update record length in header
+			buff[3] = byte(l >> 8)
+			buff[4] = byte(l)
+
+			// If interval is 0, combine all fragments
+			if c.interval.Max == 0 {
+				hello = append(hello, buff[:5+l]...)
+			} else {
+				// Write fragment immediately
+				_, err = c.Conn.Write(buff[:5+l])
+				if err != nil {
+					return 0, err
+				}
+				// Add delay between fragments (except after the last one)
+				if from < len(data) {
+					interval := time.Duration(c.interval.Random()) * time.Millisecond
+					time.Sleep(interval)
+				}
+			}
+
+			// Check if we've processed all data
+			if from >= len(data) {
+				// Write combined hello if we were buffering (intervalMax == 0)
+				if len(hello) > 0 {
+					_, err = c.Conn.Write(hello)
 					if err != nil {
-						return
+						return 0, err
 					}
 				}
-			}
-			splits := strings.Split(serverName.ServerName, ".")
-			currentIndex := serverName.Index
-			if publicSuffix := publicsuffix.List.PublicSuffix(serverName.ServerName); publicSuffix != "" {
-				splits = splits[:len(splits)-strings.Count(serverName.ServerName, ".")]
-			}
-			if len(splits) > 1 && splits[0] == "..." {
-				currentIndex += len(splits[0]) + 1
-				splits = splits[1:]
-			}
-			var splitIndexes []int
-			for i, split := range splits {
-				splitAt := rand.Intn(len(split))
-				splitIndexes = append(splitIndexes, currentIndex+splitAt)
-				currentIndex += len(split)
-				if i != len(splits)-1 {
-					currentIndex++
-				}
-			}
-			var buffer bytes.Buffer
-			for i := 0; i <= len(splitIndexes); i++ {
-				var payload []byte
-				if i == 0 {
-					payload = b[:splitIndexes[i]]
-					if c.splitRecord {
-						payload = payload[recordLayerHeaderLen:]
-					}
-				} else if i == len(splitIndexes) {
-					payload = b[splitIndexes[i-1]:]
-				} else {
-					payload = b[splitIndexes[i-1]:splitIndexes[i]]
-				}
-				if c.splitRecord {
-					if c.splitPacket {
-						buffer.Reset()
-					}
-					payloadLen := uint16(len(payload))
-					buffer.Write(b[:3])
-					binary.Write(&buffer, binary.BigEndian, payloadLen)
-					buffer.Write(payload)
-					if c.splitPacket {
-						payload = buffer.Bytes()
+
+				// Write any remaining data after the TLS record
+				if len(b) > recordLen {
+					n, err = c.Conn.Write(b[recordLen:])
+					if err != nil {
+						return recordLen + n, err
 					}
 				}
-				if c.splitPacket {
-					if c.tcpConn != nil && i != len(splitIndexes) {
-						err = writeAndWaitAck(c.ctx, c.tcpConn, payload, c.fallbackDelay)
-						if err != nil {
-							return
-						}
-					} else {
-						_, err = c.Conn.Write(payload)
-						if err != nil {
-							return
-						}
-						if i != len(splitIndexes) {
-							time.Sleep(c.fallbackDelay)
-						}
-					}
-				}
+
+				return len(b), nil
 			}
-			if c.splitRecord && !c.splitPacket {
-				_, err = c.Conn.Write(buffer.Bytes())
-				if err != nil {
-					return
-				}
-			}
-			if c.tcpConn != nil {
-				err = c.tcpConn.SetNoDelay(false)
-				if err != nil {
-					return
-				}
-			}
-			return len(b), nil
 		}
 	}
-	return c.Conn.Write(b)
+
+	// Check if this packet should be fragmented based on packet count
+	if c.packets.Min != 0 && (c.packetCounter < uint64(c.packets.Min) || c.packetCounter > uint64(c.packets.Max)) {
+		return c.Conn.Write(b)
+	}
+
+	// Fragment the packet (non-TLS-aware fragmentation)
+	var splitCount uint16
+
+	for from := 0; ; {
+		to := from + c.length.Random()
+		splitCount++
+
+		if to > len(b) || (c.maxSplits > 0 && splitCount >= c.maxSplits) {
+			to = len(b)
+		}
+
+		n, err := c.Conn.Write(b[from:to])
+		from += n
+		if err != nil {
+			return from, err
+		}
+
+		// Add delay between fragments
+		if from < len(b) {
+			time.Sleep(time.Duration(c.interval.Random()) * time.Millisecond)
+		}
+
+		if from >= len(b) {
+			return from, nil
+		}
+	}
 }
 
 func (c *Conn) ReaderReplaceable() bool {
@@ -138,7 +176,7 @@ func (c *Conn) ReaderReplaceable() bool {
 }
 
 func (c *Conn) WriterReplaceable() bool {
-	return c.firstPacketWritten
+	return c.packets.Min != 0 && (c.packetCounter < uint64(c.packets.Min) || c.packetCounter > uint64(c.packets.Max))
 }
 
 func (c *Conn) Upstream() any {
