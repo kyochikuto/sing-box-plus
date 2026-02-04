@@ -10,10 +10,9 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/ntp"
@@ -23,12 +22,10 @@ import (
 )
 
 type UTLSClientConfig struct {
-	ctx                   context.Context
-	config                *utls.Config
-	id                    utls.ClientHelloID
-	fragment              bool
-	fragmentFallbackDelay time.Duration
-	recordFragment        bool
+	ctx      context.Context
+	config   *utls.Config
+	id       utls.ClientHelloID
+	fragment *option.OutboundTLSFragmentOptions
 }
 
 func (c *UTLSClientConfig) ServerName() string {
@@ -55,8 +52,12 @@ func (c *UTLSClientConfig) Config() (*STDConfig, error) {
 }
 
 func (c *UTLSClientConfig) Client(conn net.Conn) (Conn, error) {
-	if c.recordFragment {
-		conn = tf.NewConn(conn, c.ctx, c.fragment, c.recordFragment, c.fragmentFallbackDelay)
+	if c.fragment != nil && c.fragment.Enabled {
+		conn = tf.NewConn(conn, c.ctx,
+			c.fragment.Packets,
+			c.fragment.Length,
+			c.fragment.Interval,
+			c.fragment.MaxSplits)
 	}
 	return &utlsALPNWrapper{utlsConnWrapper{utls.UClient(conn, c.config.Clone(), c.id)}, c.config.NextProtos}, nil
 }
@@ -67,7 +68,7 @@ func (c *UTLSClientConfig) SetSessionIDGenerator(generator func(clientHello []by
 
 func (c *UTLSClientConfig) Clone() Config {
 	return &UTLSClientConfig{
-		c.ctx, c.config.Clone(), c.id, c.fragment, c.fragmentFallbackDelay, c.recordFragment,
+		c.ctx, c.config.Clone(), c.id, c.fragment,
 	}
 }
 
@@ -214,7 +215,7 @@ func NewUTLSClient(ctx context.Context, serverAddress string, options option.Out
 	if err != nil {
 		return nil, err
 	}
-	uConfig := &UTLSClientConfig{ctx, &tlsConfig, id, options.Fragment, time.Duration(options.FragmentFallbackDelay), options.RecordFragment}
+	uConfig := &UTLSClientConfig{ctx, &tlsConfig, id, options.Fragment}
 	if options.ECH != nil && options.ECH.Enabled {
 		if options.Reality != nil && options.Reality.Enabled {
 			return nil, E.New("Reality is conflict with ECH")

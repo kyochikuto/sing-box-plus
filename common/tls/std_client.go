@@ -7,21 +7,18 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/ntp"
 )
 
 type STDClientConfig struct {
-	ctx                   context.Context
-	config                *tls.Config
-	fragment              bool
-	fragmentFallbackDelay time.Duration
-	recordFragment        bool
+	ctx      context.Context
+	config   *tls.Config
+	fragment *option.OutboundTLSFragmentOptions
 }
 
 func (c *STDClientConfig) ServerName() string {
@@ -45,14 +42,14 @@ func (c *STDClientConfig) Config() (*STDConfig, error) {
 }
 
 func (c *STDClientConfig) Client(conn net.Conn) (Conn, error) {
-	if c.recordFragment {
-		conn = tf.NewConn(conn, c.ctx, c.fragment, c.recordFragment, c.fragmentFallbackDelay)
+	if c.fragment != nil && c.fragment.Enabled {
+		conn = tf.NewConn(conn, c.ctx, c.fragment.Packets, c.fragment.Length, c.fragment.Interval, c.fragment.MaxSplits)
 	}
 	return tls.Client(conn, c.config), nil
 }
 
 func (c *STDClientConfig) Clone() Config {
-	return &STDClientConfig{c.ctx, c.config.Clone(), c.fragment, c.fragmentFallbackDelay, c.recordFragment}
+	return &STDClientConfig{c.ctx, c.config.Clone(), c.fragment}
 }
 
 func (c *STDClientConfig) ECHConfigList() []byte {
@@ -146,7 +143,7 @@ func NewSTDClient(ctx context.Context, serverAddress string, options option.Outb
 		}
 		tlsConfig.RootCAs = certPool
 	}
-	stdConfig := &STDClientConfig{ctx, &tlsConfig, options.Fragment, time.Duration(options.FragmentFallbackDelay), options.RecordFragment}
+	stdConfig := &STDClientConfig{ctx, &tlsConfig, options.Fragment}
 	if options.ECH != nil && options.ECH.Enabled {
 		return parseECHClientConfig(ctx, stdConfig, options)
 	} else {
