@@ -14,7 +14,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
@@ -90,8 +90,8 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		m.logger.ErrorContext(ctx, err)
 		return
 	}
-	if metadata.TLSFragment || metadata.TLSRecordFragment {
-		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment, metadata.TLSRecordFragment, metadata.TLSFragmentFallbackDelay)
+	if metadata.TLSFragment.Enabled {
+		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment.Packets, metadata.TLSFragment.Length, metadata.TLSFragment.Interval, metadata.TLSFragment.MaxSplits)
 	}
 	m.access.Lock()
 	element := m.connections.PushBack(conn)
