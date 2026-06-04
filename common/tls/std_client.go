@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -22,11 +22,9 @@ import (
 )
 
 type STDClientConfig struct {
-	ctx                   context.Context
-	config                *tls.Config
-	fragment              bool
-	fragmentFallbackDelay time.Duration
-	recordFragment        bool
+	ctx      context.Context
+	config   *tls.Config
+	fragment *option.OutboundTLSFragmentOptions
 }
 
 func (c *STDClientConfig) ServerName() string {
@@ -50,19 +48,17 @@ func (c *STDClientConfig) STDConfig() (*STDConfig, error) {
 }
 
 func (c *STDClientConfig) Client(conn net.Conn) (Conn, error) {
-	if c.recordFragment {
-		conn = tf.NewConn(conn, c.ctx, c.fragment, c.recordFragment, c.fragmentFallbackDelay)
+	if c.fragment != nil && c.fragment.Enabled {
+		conn = tf.NewConn(c.ctx, conn, c.fragment.Packets, c.fragment.Length, c.fragment.Interval, c.fragment.MaxSplits)
 	}
 	return tls.Client(conn, c.config), nil
 }
 
 func (c *STDClientConfig) Clone() Config {
 	return &STDClientConfig{
-		ctx:                   c.ctx,
-		config:                c.config.Clone(),
-		fragment:              c.fragment,
-		fragmentFallbackDelay: c.fragmentFallbackDelay,
-		recordFragment:        c.recordFragment,
+		ctx:      c.ctx,
+		config:   c.config.Clone(),
+		fragment: c.fragment,
 	}
 }
 
@@ -198,7 +194,7 @@ func NewSTDClient(ctx context.Context, logger logger.ContextLogger, serverAddres
 	} else if len(clientCertificate) > 0 || len(clientKey) > 0 {
 		return nil, E.New("client certificate and client key must be provided together")
 	}
-	var config Config = &STDClientConfig{ctx, &tlsConfig, options.Fragment, time.Duration(options.FragmentFallbackDelay), options.RecordFragment}
+	var config Config = &STDClientConfig{ctx, &tlsConfig, options.Fragment}
 	if options.ECH != nil && options.ECH.Enabled {
 		var err error
 		config, err = parseECHClientConfig(ctx, config.(ECHCapableConfig), options)
