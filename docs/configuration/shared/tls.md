@@ -18,9 +18,7 @@ icon: material/new-box
 
 !!! quote "Changes in sing-box 1.12.0"
 
-    :material-plus: [fragment](#fragment)  
-    :material-plus: [fragment_fallback_delay](#fragment_fallback_delay)  
-    :material-plus: [record_fragment](#record_fragment)  
+    :material-plus: [fragment](#fragment)
     :material-delete-clock: [ech.pq_signature_schemes_enabled](#pq_signature_schemes_enabled)  
     :material-delete-clock: [ech.dynamic_record_sizing_disabled](#dynamic_record_sizing_disabled)
 
@@ -112,9 +110,13 @@ icon: material/new-box
   "client_certificate_path": "",
   "client_key": [],
   "client_key_path": "",
-  "fragment": false,
-  "fragment_fallback_delay": "",
-  "record_fragment": false,
+  "fragment": {
+    "enabled": false,
+    "packets": "",
+    "length": "",
+    "interval": "",
+    "max_splits": 0
+  },
   "ech": {
     "enabled": false,
     "config": [],
@@ -532,37 +534,69 @@ If empty, `server_name` is used for queries.
 
 ==Client only==
 
-Fragment TLS handshakes to bypass firewalls.
+Fragment TLS handshakes to bypass TLS-based firewalls.
 
-This feature is intended to circumvent simple firewalls based on **plaintext packet matching**,
-and should not be used to circumvent real censorship.
-
-Due to poor performance, try `record_fragment` first, and only apply to server names known to be blocked.
-
-On Linux, Apple platforms, (administrator privileges required) Windows,
-the wait time can be automatically detected. Otherwise, it will fall back to
-waiting for a fixed time specified by `fragment_fallback_delay`.
-
-In addition, if the actual wait time is less than 20ms, it will also fall back to waiting for a fixed time,
-because the target is considered to be local or behind a transparent proxy.
-
-#### fragment_fallback_delay
+#### enabled
 
 !!! question "Since sing-box 1.12.0"
 
 ==Client only==
 
-The fallback value used when TLS segmentation cannot automatically determine the wait time.
+Whether to enable TLS fragmentation.
 
-`500ms` is used by default.
+Default is `false`
 
-#### record_fragment
+#### packets
 
 !!! question "Since sing-box 1.12.0"
 
 ==Client only==
 
-Fragment TLS handshake into multiple TLS records to bypass firewalls.
+The sequence of packets to fragment in a TLS handshake, this can be a single packet number or a range indicating a sequence of packets.
+
+Valid examples: `"0"`, `"1"`, `"0-1"`, `"1-3"`
+
+Default is `"0"`
+
+#### length
+
+!!! question "Since sing-box 1.12.0"
+
+==Client only==
+
+The length of payload in each fragment, this can be a fixed value or a range of numbers from each a random number will be used.
+
+Valid examples: `"1"`, `"1-517"`
+
+Default is `"1-517"`
+
+!!! note ""
+
+    Setting this to `"0"` will disable fragmentation.
+
+#### interval
+
+!!! question "Since sing-box 1.12.0"
+
+==Client only==
+
+The interval to wait between writing fragments in milliseconds, this can be a fixed value or a range of numbers from each a random number will be used.
+
+Valid examples: `"1"`, `"1-517"`
+
+Default is `"0"`
+
+#### max_splits
+
+!!! question "Since sing-box 1.12.0"
+
+==Client only==
+
+The index to the last byte in a TLS packet payload for which fragmentation is allowed. For example settings this to `517` will split the payload into N fragments based on prior settings and from 517th byte forward, a single fragment will be created.
+
+Valid value include any positive integer in the range [0-65535]
+
+Default is `517`
 
 ### ACME Fields
 
