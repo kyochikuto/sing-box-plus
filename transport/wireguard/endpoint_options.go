@@ -5,7 +5,8 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/sagernet/sing-tun"
+	"github.com/sagernet/sing-box/option"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/control"
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
@@ -45,4 +46,6 @@ type PeerOptions struct {
 	AllowedIPs                  []netip.Prefix
 	PersistentKeepaliveInterval uint16
 	Reserved                    []uint8
+	WarpScanner                 option.WarpScannerOptions
+	WarpNoise                   option.WarpNoiseOptions
 }
