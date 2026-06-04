@@ -1,12 +1,20 @@
-# sing-box
+# sing-box-plus
 
 The universal proxy platform.
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/sing-box.svg)](https://repology.org/project/sing-box/versions)
+## Plus Features
+
+- Enhanced TLS Fragmentation (Customizable version from Xray-Core)
+
+See the `examples` directory for usage examples.
 
 ## Documentation
 
 https://sing-box.sagernet.org
+
+## Credits
+
+Credits to [@GFW-knocker](https://github.com/GFW-knocker) and [@patterniha](https://github.com/patterniha) for their work on the TLS fragmentation implementation.
 
 ## License
 
