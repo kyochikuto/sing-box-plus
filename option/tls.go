@@ -111,9 +111,7 @@ type OutboundTLSOptions struct {
 	ClientCertificatePath      string                              `json:"client_certificate_path,omitempty"`
 	ClientKey                  badoption.Listable[string]          `json:"client_key,omitempty"`
 	ClientKeyPath              string                              `json:"client_key_path,omitempty"`
-	Fragment                   bool                                `json:"fragment,omitempty"`
-	FragmentFallbackDelay      badoption.Duration                  `json:"fragment_fallback_delay,omitempty"`
-	RecordFragment             bool                                `json:"record_fragment,omitempty"`
+	Fragment                   *OutboundTLSFragmentOptions         `json:"fragment,omitempty"`
 	KernelTx                   bool                                `json:"kernel_tx,omitempty"`
 	KernelRx                   bool                                `json:"kernel_rx,omitempty"`
 	ECH                        *OutboundECHOptions                 `json:"ech,omitempty"`
@@ -235,4 +233,12 @@ type OutboundRealityOptions struct {
 	Enabled   bool   `json:"enabled,omitempty"`
 	PublicKey string `json:"public_key,omitempty"`
 	ShortID   string `json:"short_id,omitempty"`
+}
+
+type OutboundTLSFragmentOptions struct {
+	Enabled   bool     `json:"enabled,omitempty"`
+	Packets   IntRange `json:"packets,omitempty"`
+	Length    IntRange `json:"length,omitempty"`
+	Interval  IntRange `json:"interval,omitempty"`
+	MaxSplits uint16   `json:"max_splits,omitempty"`
 }
