@@ -9,6 +9,8 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/cretz/bine v0.2.0
 	github.com/database64128/tfo-go/v2 v2.3.2
+	github.com/flynn/noise v1.1.0
+	github.com/fractal-networking/wireguard-go v0.0.0-20260605101042-d63a00071e6f
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
 	github.com/godbus/dbus/v5 v5.2.2
@@ -43,7 +45,7 @@ require (
 	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
 	github.com/sagernet/smux v1.5.50-sing-box-mod.1
 	github.com/sagernet/tailscale v1.92.4-sing-box-1.13-mod.7
-	github.com/sagernet/wireguard-go v0.0.2-beta.1.0.20260224074747-506b7631853c
+	github.com/sagernet/wireguard-go v0.0.2-beta.1.0.20250917110311-16510ac47288
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -61,6 +63,8 @@ require (
 	google.golang.org/protobuf v1.36.11
 	howett.net/plist v1.0.1
 )
+
+// replace github.com/fractal-networking/wireguard-go => ../wireguard-go
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
