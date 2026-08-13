@@ -5,6 +5,8 @@ The universal proxy platform.
 ## Plus Features
 
 - Enhanced TLS Fragmentation (Customizable version from Xray-Core)
+- WARP Endpoint Scanner
+- WARP Handshake Noise Generator
 
 See the `examples` directory for usage examples.
 
@@ -15,6 +17,7 @@ https://sing-box.sagernet.org
 ## Credits
 
 Credits to [@GFW-knocker](https://github.com/GFW-knocker) and [@patterniha](https://github.com/patterniha) for their work on the TLS fragmentation implementation.
+Credits to [@bepass-org](https://github.com/bepass-org), [@markpash](https://github.com/markpash), and [@GFW-knocker](https://github.com/GFW-knocker) for their work on the WARP scanner and noise generator.
 
 ## License
 

@@ -15,7 +15,7 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/route/rule"
 	"github.com/sagernet/sing-box/transport/wireguard"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -107,6 +107,8 @@ func NewEndpoint(ctx context.Context, router adapter.Router, logger log.ContextL
 				AllowedIPs:                  it.AllowedIPs,
 				PersistentKeepaliveInterval: it.PersistentKeepaliveInterval,
 				Reserved:                    it.Reserved,
+				WarpScanner:                 it.WarpScanner,
+				WarpNoise:                   it.WarpNoise,
 			}
 		}),
 		Workers: options.Workers,
