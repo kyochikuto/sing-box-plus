@@ -1,12 +1,8 @@
-name: Build
+name: Build and release
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version name"
-        required: true
-        type: string
       build:
         description: "Build type"
         required: true
@@ -14,42 +10,237 @@ on:
         default: "All"
         options:
           - All
-          - Binary
+          - Linux
+          - Darwin
+          - Windows
           - Android
-          - Apple
-          - Apple-release
-          - iOS
-          - macOS
-          - tvOS
-          - macOS-standalone
-          - publish-android
-      test_message:
-        description: "TestFlight test message"
-        required: false
-        type: string
-  push:
-    branches:
-      - stable
-      - testing
-      - unstable
+
+permissions:
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.build }}
   cancel-in-progress: true
 
 jobs:
-  calculate_version:
-    name: Calculate version
+  set_version:
+    name: Gather release version info
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.outputs.outputs.version }}
+      tag: ${{ steps.outputs.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.25.12
+          cache: false
+      - name: Extracting version number from changelog.md
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          LATEST_VERSION=$(grep -E -m 1 '^(###|####) ' docs/changelog.md | sed 's/^[#]* //')
+          echo "version=$LATEST_VERSION" >> "$GITHUB_ENV"
+      - name: Set outputs
+        id: outputs
+        run: |
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+  create_release:
+    name: Create draft release
+    needs: set_version
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ needs.set_version.outputs.tag }}
+      VERSION: ${{ needs.set_version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup environment
+        shell: bash
+        run: |
+          echo "VERSION=${{ env.VERSION }}"
+          RELEASE_NOTES=$(awk "/^### $VERSION$|^#### $VERSION$/{flag=1;next}/^(###|####) /{flag=0}flag" docs/changelog.md)
+          echo "$RELEASE_NOTES" > changelog.md
+          echo -e "Setting release name to version $VERSION"
+          echo -e "Release notes: ${RELEASE_NOTES}"
+      - name: Create draft release
+        run: |
+          gh release create ${{ env.RELEASE_TAG }} --title ${{ env.VERSION }} --notes-file changelog.md --latest --draft
+
+  build_linux:
+    name: Build Linux binaries
+    if: ${{ inputs.build == 'All' || inputs.build == 'Linux' }}
+    runs-on: ubuntu-latest
+    needs:
+      - set_version
+      - create_release
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: linux, arch: amd64, variant: purego, naive: true }
+          - { os: linux, arch: amd64, variant: glibc, naive: true }
+          - {
+              os: linux,
+              arch: amd64,
+              variant: musl,
+              naive: true,
+              debian: amd64,
+              rpm: x86_64,
+              pacman: x86_64,
+              alpine: x86_64,
+              openwrt: "x86_64",
+            }
+
+          - { os: linux, arch: arm64, variant: purego, naive: true }
+          - { os: linux, arch: arm64, variant: glibc, naive: true }
+          - {
+              os: linux,
+              arch: arm64,
+              variant: musl,
+              naive: true,
+              debian: arm64,
+              rpm: aarch64,
+              pacman: aarch64,
+              alpine: aarch64,
+              openwrt: "aarch64_cortex-a53 aarch64_cortex-a72 aarch64_cortex-a76 aarch64_generic",
+            }
+
+          - { os: linux, arch: "386", go386: sse2 }
+          - { os: linux, arch: "386", variant: glibc, naive: true, go386: sse2 }
+          - {
+              os: linux,
+              arch: "386",
+              variant: musl,
+              naive: true,
+              go386: sse2,
+              debian: i386,
+              rpm: i386,
+              alpine: x86,
+              openwrt: "i386_pentium4",
+            }
+
+          - { os: linux, arch: arm, goarm: "7" }
+          - { os: linux, arch: arm, variant: glibc, naive: true, goarm: "7" }
+          - {
+              os: linux,
+              arch: arm,
+              goarm: "7",
+              debian: armhf,
+              rpm: armv7hl,
+              pacman: armv7hl,
+              alpine: armv7,
+              openwrt: "arm_cortex-a5_vfpv4 arm_cortex-a7_neon-vfpv4 arm_cortex-a7_vfpv4 arm_cortex-a8_vfpv3 arm_cortex-a9_neon arm_cortex-a9_vfpv3-d16 arm_cortex-a15_neon-vfpv4",
+            }
+
+          - {
+              os: linux,
+              arch: mipsle,
+              gomips: hardfloat,
+              naive: true,
+              variant: glibc,
+            }
+          - {
+              os: linux,
+              arch: mipsle,
+              gomips: softfloat,
+              debian: mipsel,
+              rpm: mipsel,
+              openwrt: "mipsel_24kc mipsel_74kc mipsel_mips32",
+            }
+          - {
+              os: linux,
+              arch: mips64le,
+              gomips: hardfloat,
+              naive: true,
+              variant: glibc,
+              debian: mips64el,
+              rpm: mips64el,
+            }
+          - { os: linux, arch: riscv64, naive: true, variant: glibc }
+          - {
+              os: linux,
+              arch: riscv64,
+              debian: riscv64,
+              rpm: riscv64,
+              alpine: riscv64,
+              openwrt: "riscv64_generic",
+            }
+          - { os: linux, arch: loong64, naive: true, variant: glibc }
+          - {
+              os: linux,
+              arch: loong64,
+              debian: loongarch64,
+              rpm: loongarch64,
+              alpine: loongarch64,
+              openwrt: "loongarch64_generic",
+            }
+
+          - {
+              os: linux,
+              arch: "386",
+              go386: softfloat,
+              openwrt: "i386_pentium-mmx",
+            }
+          - {
+              os: linux,
+              arch: arm,
+              goarm: "5",
+              openwrt: "arm_arm926ej-s arm_cortex-a7 arm_cortex-a9 arm_fa526 arm_xscale",
+            }
+          - {
+              os: linux,
+              arch: arm,
+              goarm: "6",
+              debian: armel,
+              rpm: armv6hl,
+              openwrt: "arm_arm1176jzf-s_vfp",
+            }
+          - {
+              os: linux,
+              arch: mips,
+              gomips: softfloat,
+              openwrt: "mips_24kc mips_4kec mips_mips32",
+            }
+          - {
+              os: linux,
+              arch: mipsle,
+              gomips: hardfloat,
+              openwrt: "mipsel_24kc_24kf",
+            }
+          - {
+              os: linux,
+              arch: mipsle,
+              gomips: softfloat,
+              openwrt: "mipsel_24kc mipsel_74kc mipsel_mips32",
+            }
+          - {
+              os: linux,
+              arch: mips64,
+              gomips: softfloat,
+              openwrt: "mips64_mips64r2 mips64_octeonplus",
+            }
+          - { os: linux, arch: mips64le, gomips: hardfloat }
+          - {
+              os: linux,
+              arch: mips64le,
+              gomips: softfloat,
+              openwrt: "mips64el_mips64r2",
+            }
+          - { os: linux, arch: s390x, debian: s390x, rpm: s390x }
+          - { os: linux, arch: ppc64le, debian: ppc64el, rpm: ppc64le }
+          - { os: linux, arch: riscv64 }
+          - { os: linux, arch: loong64 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 1.25.12
           cache: false
@@ -65,117 +256,8 @@ jobs:
           path: ~/.cache/go-build
           key: go-build-tools-linux-${{ hashFiles('go.sum') }}
           restore-keys: go-build-tools-linux-
-      - name: Check input version
-        if: github.event_name == 'workflow_dispatch'
-        run: |-
-          echo "version=${{ inputs.version }}"
-          echo "version=${{ inputs.version }}" >> "$GITHUB_ENV"
-      - name: Calculate version
-        if: github.event_name != 'workflow_dispatch'
-        run: |-
-          go run -v ./cmd/internal/read_tag --ci --nightly
-      - name: Set outputs
-        id: outputs
-        run: |-
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-  build:
-    name: Build binary
-    if: github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Binary'
-    runs-on: ubuntu-26.04
-    needs:
-      - calculate_version
-    strategy:
-      max-parallel: 13
-      matrix:
-        include:
-          - { os: linux, arch: amd64, variant: purego, naive: true }
-          - { os: linux, arch: amd64, variant: glibc, naive: true }
-          - { os: linux, arch: amd64, variant: musl, naive: true, debian: amd64, rpm: x86_64, pacman: x86_64, alpine: x86_64, openwrt: "x86_64" }
-
-          - { os: linux, arch: arm64, variant: purego, naive: true }
-          - { os: linux, arch: arm64, variant: glibc, naive: true }
-          - { os: linux, arch: arm64, variant: musl, naive: true, debian: arm64, rpm: aarch64, pacman: aarch64, alpine: aarch64, openwrt: "aarch64_cortex-a53 aarch64_cortex-a72 aarch64_cortex-a76 aarch64_generic" }
-
-          - { os: linux, arch: "386", go386: sse2 }
-          - { os: linux, arch: "386", variant: glibc, naive: true, go386: sse2 }
-          - { os: linux, arch: "386", variant: musl, naive: true, go386: sse2, debian: i386, rpm: i386, alpine: x86, openwrt: "i386_pentium4" }
-
-          - { os: linux, arch: arm, goarm: "7" }
-          - { os: linux, arch: arm, variant: glibc, naive: true, goarm: "7" }
-          - { os: linux, arch: arm, variant: musl, naive: true, goarm: "7", debian: armhf, rpm: armv7hl, pacman: armv7hl, alpine: armv7, openwrt: "arm_cortex-a5_vfpv4 arm_cortex-a7_neon-vfpv4 arm_cortex-a7_vfpv4 arm_cortex-a8_vfpv3 arm_cortex-a9_neon arm_cortex-a9_vfpv3-d16 arm_cortex-a15_neon-vfpv4" }
-
-          - { os: linux, arch: mipsle, gomips: hardfloat, naive: true, variant: glibc }
-          - { os: linux, arch: mipsle, gomips: softfloat, naive: true, variant: musl, debian: mipsel, rpm: mipsel, openwrt: "mipsel_24kc mipsel_74kc mipsel_mips32" }
-          - { os: linux, arch: mips64le, gomips: hardfloat, naive: true, variant: glibc, debian: mips64el, rpm: mips64el }
-          - { os: linux, arch: riscv64, naive: true, variant: glibc }
-          - { os: linux, arch: riscv64, naive: true, variant: musl, debian: riscv64, rpm: riscv64, alpine: riscv64, openwrt: "riscv64_generic" }
-          - { os: linux, arch: loong64, naive: true, variant: glibc }
-          - { os: linux, arch: loong64, naive: true, variant: musl, debian: loongarch64, rpm: loongarch64, alpine: loongarch64, openwrt: "loongarch64_generic" }
-
-          - { os: linux, arch: "386", go386: softfloat, openwrt: "i386_pentium-mmx" }
-          - { os: linux, arch: arm, goarm: "5", openwrt: "arm_arm926ej-s arm_cortex-a7 arm_cortex-a9 arm_fa526 arm_xscale" }
-          - { os: linux, arch: arm, goarm: "6", debian: armel, rpm: armv6hl, openwrt: "arm_arm1176jzf-s_vfp" }
-          - { os: linux, arch: mips, gomips: softfloat, openwrt: "mips_24kc mips_4kec mips_mips32" }
-          - { os: linux, arch: mipsle, gomips: hardfloat, openwrt: "mipsel_24kc_24kf" }
-          - { os: linux, arch: mipsle, gomips: softfloat }
-          - { os: linux, arch: mips64, gomips: softfloat, openwrt: "mips64_mips64r2 mips64_octeonplus" }
-          - { os: linux, arch: mips64le, gomips: hardfloat }
-          - { os: linux, arch: mips64le, gomips: softfloat, openwrt: "mips64el_mips64r2" }
-          - { os: linux, arch: s390x, debian: s390x, rpm: s390x }
-          - { os: linux, arch: ppc64le, debian: ppc64el, rpm: ppc64le }
-          - { os: linux, arch: riscv64 }
-          - { os: linux, arch: loong64 }
-
-          - { os: windows, arch: amd64, legacy_win7: true, legacy_name: "windows-7" }
-          - { os: windows, arch: "386", legacy_win7: true, legacy_name: "windows-7" }
-
-          - { os: android, arch: arm64, ndk: "aarch64-linux-android23" }
-          - { os: android, arch: arm, ndk: "armv7a-linux-androideabi23" }
-          - { os: android, arch: amd64, ndk: "x86_64-linux-android23" }
-          - { os: android, arch: "386", ndk: "i686-linux-android23" }
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 1
-      - name: Setup Go
-        if: ${{ ! matrix.legacy_win7 }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.12
-          cache: false
-      - name: Cache Go modules
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-linux-${{ hashFiles('go.sum') }}
-          restore-keys: go-mod-linux-
-      - name: Cache Go for Windows 7
-        if: matrix.legacy_win7
-        id: cache-go-for-windows7
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/go_win7
-          key: go_win7_12512
-      - name: Setup Go for Windows 7
-        if: matrix.legacy_win7 && steps.cache-go-for-windows7.outputs.cache-hit != 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |-
-          .github/setup_go_for_windows7.sh
-      - name: Setup Go for Windows 7
-        if: matrix.legacy_win7
-        run: |-
-          echo "PATH=$HOME/go/go_win7/bin:$PATH" >> $GITHUB_ENV
-          echo "GOROOT=$HOME/go/go_win7" >> $GITHUB_ENV
-      - name: Setup Android NDK
-        if: matrix.os == 'android'
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r28
       - name: Clone cronet-go
-        if: matrix.naive && matrix.variant != 'purego'
+        if: matrix.naive
         run: |
           set -xeuo pipefail
           CRONET_GO_VERSION=$(cat .github/CRONET_GO_VERSION)
@@ -186,14 +268,25 @@ jobs:
           git -C ~/cronet-go checkout FETCH_HEAD
           git -C ~/cronet-go submodule update --init --recursive --depth=1
       - name: Regenerate Debian keyring
-        if: matrix.naive && matrix.variant != 'purego'
+        if: matrix.naive
         run: |
           set -xeuo pipefail
           rm -f ~/cronet-go/naiveproxy/src/build/linux/sysroot_scripts/keyring.gpg
           cd ~/cronet-go
           GPG_TTY=/dev/null ./naiveproxy/src/build/linux/sysroot_scripts/generate_keyring.sh
+      - name: Cache Chromium toolchain
+        if: matrix.naive
+        id: cache-chromium-toolchain
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/cronet-go/naiveproxy/src/third_party/llvm-build/
+            ~/cronet-go/naiveproxy/src/gn/out/
+            ~/cronet-go/naiveproxy/src/chrome/build/pgo_profiles/
+            ~/cronet-go/naiveproxy/src/out/sysroot-build/
+          key: chromium-toolchain-${{ matrix.arch }}-${{ matrix.variant }}-${{ hashFiles('.github/CRONET_GO_VERSION') }}
       - name: Download Chromium toolchain
-        if: matrix.naive && matrix.variant != 'purego'
+        if: matrix.naive
         run: |
           set -xeuo pipefail
           cd ~/cronet-go
@@ -203,7 +296,7 @@ jobs:
             go run ./cmd/build-naive --target=linux/${{ matrix.arch }} download-toolchain
           fi
       - name: Set Chromium toolchain environment
-        if: matrix.naive && matrix.variant != 'purego'
+        if: matrix.naive
         run: |
           set -xeuo pipefail
           cd ~/cronet-go
@@ -214,8 +307,8 @@ jobs:
           fi
       - name: Set tag
         run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
+          git ls-remote --exit-code --tags origin ${{ needs.set_version.outputs.tag }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
+          git tag ${{ needs.set_version.outputs.tag }} -f
       - name: Set build tags
         run: |
           set -xeuo pipefail
@@ -239,7 +332,7 @@ jobs:
           set -xeuo pipefail
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box -tags "${BUILD_TAGS}" \
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
           ./cmd/sing-box
         env:
           CGO_ENABLED: "0"
@@ -268,7 +361,7 @@ jobs:
           set -xeuo pipefail
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box -tags "${BUILD_TAGS}" \
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
           ./cmd/sing-box
         env:
           CGO_ENABLED: "1"
@@ -285,7 +378,7 @@ jobs:
           set -xeuo pipefail
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box -tags "${BUILD_TAGS}" \
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
           ./cmd/sing-box
         env:
           CGO_ENABLED: "1"
@@ -297,12 +390,12 @@ jobs:
           GOMIPS64: ${{ matrix.gomips }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build (non-variant)
-        if: matrix.os != 'android' && matrix.variant == ''
+        if: matrix.variant == ''
         run: |
           set -xeuo pipefail
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box -tags "${BUILD_TAGS}" \
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
           ./cmd/sing-box
         env:
           CGO_ENABLED: "0"
@@ -313,33 +406,15 @@ jobs:
           GOMIPS: ${{ matrix.gomips }}
           GOMIPS64: ${{ matrix.gomips }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build Android
-        if: matrix.os == 'android'
-        run: |
-          set -xeuo pipefail
-          go install -v ./cmd/internal/build
-          export CC='${{ matrix.ndk }}-clang'
-          export CXX="${CC}++"
-          mkdir -p dist
-          GOOS=$BUILD_GOOS GOARCH=$BUILD_GOARCH build go build -v -trimpath -o dist/sing-box -tags "${BUILD_TAGS}" \
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
-          ./cmd/sing-box
-        env:
-          CGO_ENABLED: "1"
-          BUILD_GOOS: ${{ matrix.os }}
-          BUILD_GOARCH: ${{ matrix.arch }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Set name
         run: |-
-          DIR_NAME="sing-box-${{ needs.calculate_version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          DIR_NAME="sing-box-${{ needs.set_version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
           if [[ -n "${{ matrix.goarm }}" ]]; then
             DIR_NAME="${DIR_NAME}v${{ matrix.goarm }}"
           elif [[ -n "${{ matrix.go386 }}" && "${{ matrix.go386 }}" != 'sse2' ]]; then
             DIR_NAME="${DIR_NAME}-${{ matrix.go386 }}"
           elif [[ -n "${{ matrix.gomips }}" && "${{ matrix.gomips }}" != 'hardfloat' ]]; then
             DIR_NAME="${DIR_NAME}-${{ matrix.gomips }}"
-          elif [[ -n "${{ matrix.legacy_name }}" ]]; then
-            DIR_NAME="${DIR_NAME}-legacy-${{ matrix.legacy_name }}"
           fi
           if [[ "${{ matrix.variant }}" == "glibc" ]]; then
             DIR_NAME="${DIR_NAME}-glibc"
@@ -347,7 +422,7 @@ jobs:
             DIR_NAME="${DIR_NAME}-musl"
           fi
           echo "DIR_NAME=${DIR_NAME}" >> "${GITHUB_ENV}"
-          PKG_VERSION="${{ needs.calculate_version.outputs.version }}"
+          PKG_VERSION="${{ needs.set_version.outputs.version }}"
           PKG_VERSION="${PKG_VERSION//-/\~}"
           echo "PKG_VERSION=${PKG_VERSION}" >> "${GITHUB_ENV}"
       - name: Package DEB
@@ -355,13 +430,16 @@ jobs:
         run: |
           set -xeuo pipefail
           sudo gem install fpm
+          sudo apt-get update
           sudo apt-get install -y debsigs
           cp .fpm_systemd .fpm
           fpm -t deb \
             -v "$PKG_VERSION" \
-            -p "dist/sing-box_${{ needs.calculate_version.outputs.version }}_${{ matrix.os }}_${{ matrix.debian }}.deb" \
+            -p "dist/sing-box_${{ needs.set_version.outputs.version }}_${{ matrix.os }}_${{ matrix.debian }}.deb" \
             --architecture ${{ matrix.debian }} \
             dist/sing-box=/usr/bin/sing-box
+          curl -Lo '/tmp/debsigs.diff' 'https://gitlab.com/debsigs/debsigs/-/commit/160138f5de1ec110376d3c807b60a37388bc7c90.diff'
+          sudo patch /usr/bin/debsigs < '/tmp/debsigs.diff'
           rm -rf $HOME/.gnupg
           gpg --pinentry-mode loopback --passphrase "${{ secrets.GPG_PASSPHRASE }}" --import <<EOF
           ${{ secrets.GPG_KEY }}
@@ -372,11 +450,10 @@ jobs:
         run: |-
           set -xeuo pipefail
           sudo gem install fpm
-          echo '%_rpmformat 4' > "$HOME/.rpmmacros"
           cp .fpm_systemd .fpm
           fpm -t rpm \
             -v "$PKG_VERSION" \
-            -p "dist/sing-box_${{ needs.calculate_version.outputs.version }}_${{ matrix.os }}_${{ matrix.rpm }}.rpm" \
+            -p "dist/sing-box_${{ needs.set_version.outputs.version }}_${{ matrix.os }}_${{ matrix.rpm }}.rpm" \
             --architecture ${{ matrix.rpm }} \
             dist/sing-box=/usr/bin/sing-box
           cat > $HOME/.rpmmacros <<EOF
@@ -392,12 +469,12 @@ jobs:
         run: |-
           set -xeuo pipefail
           sudo gem install fpm
-          sudo apt-get update || true
+          sudo apt-get update
           sudo apt-get install -y libarchive-tools
           cp .fpm_pacman .fpm
           fpm -t pacman \
             -v "$PKG_VERSION" \
-            -p "dist/sing-box_${{ needs.calculate_version.outputs.version }}_${{ matrix.os }}_${{ matrix.pacman }}.pkg.tar.zst" \
+            -p "dist/sing-box_${{ needs.set_version.outputs.version }}_${{ matrix.os }}_${{ matrix.pacman }}.pkg.tar.zst" \
             --architecture ${{ matrix.pacman }} \
             dist/sing-box=/usr/bin/sing-box
       - name: Package OpenWrt
@@ -412,7 +489,7 @@ jobs:
             --architecture all \
             dist/sing-box=/usr/bin/sing-box
           for architecture in ${{ matrix.openwrt }}; do
-            .github/deb2ipk.sh "$architecture" "dist/openwrt.deb" "dist/sing-box_${{ needs.calculate_version.outputs.version }}_openwrt_${architecture}.ipk"
+            .github/deb2ipk.sh "$architecture" "dist/openwrt.deb" "dist/sing-box_${{ needs.set_version.outputs.version }}_openwrt_${architecture}.ipk"
           done
           rm "dist/openwrt.deb"
       - name: Install apk-tools
@@ -426,9 +503,9 @@ jobs:
           for architecture in ${{ matrix.openwrt }}; do
             .github/build_openwrt_apk.sh \
               "$architecture" \
-              "${{ needs.calculate_version.outputs.version }}" \
+              "${{ needs.set_version.outputs.version }}" \
               "dist/sing-box" \
-              "dist/sing-box_${{ needs.calculate_version.outputs.version }}_openwrt_${architecture}.apk"
+              "dist/sing-box_${{ needs.set_version.outputs.version }}_openwrt_${architecture}.apk"
           done
       - name: Package Alpine APK
         if: matrix.alpine != ''
@@ -436,40 +513,40 @@ jobs:
           set -xeuo pipefail
           .github/build_alpine_apk.sh \
             "${{ matrix.alpine }}" \
-            "${{ needs.calculate_version.outputs.version }}" \
+            "${{ needs.set_version.outputs.version }}" \
             "dist/sing-box" \
-            "dist/sing-box_${{ needs.calculate_version.outputs.version }}_linux_${{ matrix.alpine }}.apk"
+            "dist/sing-box_${{ needs.set_version.outputs.version }}_linux_${{ matrix.alpine }}.apk"
       - name: Archive
         run: |
           set -xeuo pipefail
           cd dist
           mkdir -p "${DIR_NAME}"
           cp ../LICENSE "${DIR_NAME}"
-          if [ '${{ matrix.os }}' = 'windows' ]; then
-            cp sing-box "${DIR_NAME}/sing-box.exe"
-            zip -r "${DIR_NAME}.zip" "${DIR_NAME}"
-          else
-            cp sing-box "${DIR_NAME}"
-            if [ -f libcronet.so ]; then
-              cp libcronet.so "${DIR_NAME}"
-            fi
-            tar -czvf "${DIR_NAME}.tar.gz" "${DIR_NAME}"
+          cp sing-box "${DIR_NAME}"
+          if [ -f libcronet.so ]; then
+            cp libcronet.so "${DIR_NAME}"
           fi
+          tar -czvf "${DIR_NAME}.tar.gz" "${DIR_NAME}"
           rm -r "${DIR_NAME}"
       - name: Cleanup
         run: rm -f dist/sing-box dist/libcronet.so
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.os }}_${{ matrix.arch }}${{ matrix.goarm && format('v{0}', matrix.goarm) }}${{ matrix.go386 && format('_{0}', matrix.go386) }}${{ matrix.gomips && format('_{0}', matrix.gomips) }}${{ matrix.legacy_name && format('-legacy-{0}', matrix.legacy_name) }}${{ matrix.variant && format('-{0}', matrix.variant) }}
-          path: "dist"
+      - name: Upload to release
+        run: |
+          cd dist
+          for file in *; do
+            [ "$file" = "sing-box" ] && continue
+            gh release upload ${{ needs.set_version.outputs.tag }} "$file" --clobber
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build_darwin:
     name: Build Darwin binaries
-    if: ${{ !failure() && !cancelled() && (github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Binary') }}
+    if: ${{ inputs.build == 'All' || inputs.build == 'Darwin' }}
     runs-on: macos-latest
     needs:
-      - calculate_version
-      - build_apple_library
+      - set_version
+      - create_release
     strategy:
       matrix:
         include:
@@ -478,14 +555,14 @@ jobs:
           - { arch: amd64, legacy_osx: true, legacy_name: "macos-10.13" }
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Setup Go
         if: ${{ ! matrix.legacy_osx }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ^1.25.3
+          go-version: 1.25.12
           cache: false
       - name: Cache Go modules
         uses: actions/cache/restore@v4
@@ -496,7 +573,7 @@ jobs:
       - name: Cache Go for macOS 10.13
         if: matrix.legacy_osx
         id: cache-go-for-macos1013
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/go/go_osx
@@ -514,8 +591,8 @@ jobs:
           echo "GOROOT=$HOME/go/go_osx" >> $GITHUB_ENV
       - name: Set tag
         run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
+          git ls-remote --exit-code --tags origin ${{ needs.set_version.outputs.tag }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
+          git tag ${{ needs.set_version.outputs.tag }} -f
       - name: Set build tags
         run: |
           set -xeuo pipefail
@@ -533,7 +610,7 @@ jobs:
           set -xeuo pipefail
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box -tags "${BUILD_TAGS}" \
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' ${LDFLAGS_SHARED} -s -w -buildid=" \
           ./cmd/sing-box
         env:
           CGO_ENABLED: "1"
@@ -543,7 +620,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Set name
         run: |-
-          DIR_NAME="sing-box-${{ needs.calculate_version.outputs.version }}-darwin-${{ matrix.arch }}"
+          DIR_NAME="sing-box-${{ needs.set_version.outputs.version }}-darwin-${{ matrix.arch }}"
           if [[ -n "${{ matrix.legacy_name }}" ]]; then
             DIR_NAME="${DIR_NAME}-legacy-${{ matrix.legacy_name }}"
           fi
@@ -559,43 +636,49 @@ jobs:
           rm -r "${DIR_NAME}"
       - name: Cleanup
         run: rm dist/sing-box
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-darwin_${{ matrix.arch }}${{ matrix.legacy_name && format('-legacy-{0}', matrix.legacy_name) }}
-          path: "dist"
+      - name: Upload to release
+        run: |
+          cd dist
+          for file in *; do
+            [ "$file" = "sing-box" ] && continue
+            gh release upload ${{ needs.set_version.outputs.tag }} "$file" --clobber
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build_windows:
     name: Build Windows binaries
-    if: github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Binary'
+    if: ${{ inputs.build == 'All' || inputs.build == 'Windows' }}
     runs-on: windows-latest
     needs:
-      - calculate_version
+      - set_version
+      - create_release
     strategy:
       matrix:
         include:
           - { arch: amd64, naive: true }
-          - { arch: "386" }
           - { arch: arm64, naive: true }
+          - { arch: "386" }
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ^1.25.4
+          go-version: 1.25.12
           cache: false
       - name: Cache Go modules
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
           key: go-mod-windows-${{ hashFiles('go.sum') }}
           restore-keys: go-mod-windows-
       - name: Set tag
         run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$env:GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
+          git ls-remote --exit-code --tags origin ${{ needs.set_version.outputs.tag }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
+          git tag ${{ needs.set_version.outputs.tag }} -f
       - name: Build
         if: matrix.naive
         run: |
@@ -603,7 +686,7 @@ jobs:
           $LDFLAGS_SHARED = Get-Content release/LDFLAGS
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box.exe -tags "$TAGS" `
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' $LDFLAGS_SHARED -s -w -buildid=" `
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' $LDFLAGS_SHARED -s -w -buildid=" `
           ./cmd/sing-box
         env:
           CGO_ENABLED: "0"
@@ -617,7 +700,7 @@ jobs:
           $LDFLAGS_SHARED = Get-Content release/LDFLAGS
           mkdir -p dist
           go build -v -trimpath -o dist/sing-box.exe -tags "$TAGS" `
-          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.calculate_version.outputs.version }}' $LDFLAGS_SHARED -s -w -buildid=" `
+          -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=${{ needs.set_version.outputs.version }}' $LDFLAGS_SHARED -s -w -buildid=" `
           ./cmd/sing-box
         env:
           CGO_ENABLED: "0"
@@ -635,10 +718,18 @@ jobs:
           git -C "$env:RUNNER_TEMP/cronet-go-lib" fetch --depth=1 --filter=blob:none origin "$CRONET_GO_VERSION"
           git -C "$env:RUNNER_TEMP/cronet-go-lib" checkout FETCH_HEAD
           Copy-Item "$env:RUNNER_TEMP/cronet-go-lib/$LIBRARY_PATH" dist
-      - name: Archive
+      - name: Set name
+        shell: bash
+        run: |-
+          DIR_NAME="sing-box-${{ needs.set_version.outputs.version }}-windows-${{ matrix.arch }}"
+          if [[ -n "${{ matrix.legacy_name }}" ]]; then
+            DIR_NAME="${DIR_NAME}-legacy-${{ matrix.legacy_name }}"
+          fi
+          echo "DIR_NAME=${DIR_NAME}" >> "${GITHUB_ENV}"
+      - name: Archive with Naive dll
         if: matrix.naive
         run: |
-          $DIR_NAME = "sing-box-${{ needs.calculate_version.outputs.version }}-windows-${{ matrix.arch }}"
+          $DIR_NAME = "${{ env.DIR_NAME }}"
           mkdir "dist/$DIR_NAME"
           Copy-Item LICENSE "dist/$DIR_NAME"
           Copy-Item "dist/sing-box.exe" "dist/$DIR_NAME"
@@ -648,119 +739,63 @@ jobs:
       - name: Archive
         if: ${{ !matrix.naive }}
         run: |
-          $DIR_NAME = "sing-box-${{ needs.calculate_version.outputs.version }}-windows-${{ matrix.arch }}"
+          $DIR_NAME = "${{ env.DIR_NAME }}"
           mkdir "dist/$DIR_NAME"
           Copy-Item LICENSE "dist/$DIR_NAME"
           Copy-Item "dist/sing-box.exe" "dist/$DIR_NAME"
           Compress-Archive -Path "dist/$DIR_NAME" -DestinationPath "dist/$DIR_NAME.zip"
           Remove-Item -Recurse "dist/$DIR_NAME"
       - name: Cleanup
-        if: matrix.naive
+        if: ${{ matrix.naive }}
         run: Remove-Item dist/sing-box.exe, dist/libcronet.dll
       - name: Cleanup
         if: ${{ !matrix.naive }}
         run: Remove-Item dist/sing-box.exe
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-windows_${{ matrix.arch }}
-          path: "dist"
-  build_android_library:
-    name: Build Android library (${{ matrix.go_arch }})
-    if: (github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Android' || inputs.build == 'publish-android') && github.ref != 'refs/heads/oldstable'
-    runs-on: ubuntu-latest
-    needs:
-      - calculate_version
-    strategy:
-      fail-fast: false
-      matrix:
-        go_arch:
-          - "386"
-          - amd64
-          - arm
-          - arm64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 1
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.12
-          cache: false
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-linux-${{ hashFiles('go.sum') }}
-          restore-keys: go-mod-linux-
-      - name: Setup Android NDK
-        id: setup-ndk
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r28
-      - name: Setup OpenJDK
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
-        with:
-          distribution: temurin
-          java-version: 17
-      - name: Set tag
-        run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
-      - name: Build library
-        run: |-
-          make lib_install
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          go run ./cmd/internal/build_libbox -target android -platform android/${{ matrix.go_arch }}
-          mkdir -p dist/${{ matrix.go_arch }}
-          mv libbox.aar libbox-legacy.aar dist/${{ matrix.go_arch }}
+      - name: Upload Naive bundled to release
+        if: ${{ matrix.naive }}
+        run: |
+          Set-Location dist
+          Get-ChildItem -File | Where-Object { $_.Name -ne "*.zip" } | ForEach-Object {
+            gh release upload ${{ needs.set_version.outputs.tag }} $_.Name --clobber
+          }
         env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      - name: Upload library
-        uses: actions/upload-artifact@v4
-        with:
-          name: libbox-android-${{ matrix.go_arch }}
-          path: dist
-          compression-level: 0
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload to release
+        if: ${{ !matrix.naive }}
+        run: |
+          Set-Location dist
+          Get-ChildItem -File | Where-Object { $_.Name -ne "sing-box.exe" } | ForEach-Object {
+            gh release upload ${{ needs.set_version.outputs.tag }} $_.Name --clobber
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build_android:
-    name: Build Android (${{ matrix.variant }})
-    if: (github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Android') && github.ref != 'refs/heads/oldstable'
+    name: Build Android
+    if: ${{ inputs.build == 'All' || inputs.build == 'Android' }}
     runs-on: ubuntu-latest
     needs:
-      - calculate_version
-      - build_android_library
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: other
-            task: :app:assembleOtherRelease
-            output: app/build/outputs/apk/other/release/*.apk
-          - variant: other-legacy
-            task: :app:assembleOtherLegacyRelease
-            output: app/build/outputs/apk/otherLegacy/release/*.apk
+      - set_version
+      - create_release
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 1
-      - name: Checkout Android client
-        run: git submodule update --init clients/android
+          fetch-depth: 0
+          submodules: "recursive"
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 1.25.12
           cache: false
       - name: Cache Go modules
-        uses: actions/cache/restore@v4
+        uses: actions/cache@v6
         with:
           path: ~/go/pkg/mod
           key: go-mod-linux-${{ hashFiles('go.sum') }}
           restore-keys: go-mod-linux-
       - name: Cache Go tool builds
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/go-build
           key: go-build-tools-linux-${{ hashFiles('go.sum') }}
@@ -771,63 +806,110 @@ jobs:
         with:
           ndk-version: r28
       - name: Setup OpenJDK
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
       - name: Set tag
         run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
-      - name: Download libraries
-        uses: actions/download-artifact@v4
-        with:
-          pattern: libbox-android-*
-          path: libbox-inputs
-          merge-multiple: true
-      - name: Merge libraries
-        run: |-
-          go run ./cmd/internal/merge_aar -output libbox.aar libbox-inputs/*/libbox.aar
-          go run ./cmd/internal/merge_aar -output libbox-legacy.aar libbox-inputs/*/libbox-legacy.aar
+          git ls-remote --exit-code --tags origin ${{ needs.set_version.outputs.tag }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
+          git tag ${{ needs.set_version.outputs.tag }} -f
       - name: Checkout main branch
-        if: github.ref == 'refs/heads/stable' && github.event_name != 'workflow_dispatch'
         run: |-
           cd clients/android
           git checkout main
-      - name: Checkout dev branch
-        if: github.ref == 'refs/heads/testing'
-        run: |-
-          cd clients/android
-          git checkout dev
       - name: Checkout submodule recursive
         run: |-
           cd clients/android
           git submodule update --init --recursive -v
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
-        with:
-          cache-provider: basic
       - name: Update version
-        if: github.event_name == 'workflow_dispatch'
         run: |-
           go run -v ./cmd/internal/update_android_version --ci
-      - name: Update nightly version
-        if: github.event_name != 'workflow_dispatch'
+      - name: Write keystore properties
+        run: echo "${{ secrets.LOCAL_PROPERTIES }}" | base64 -d > clients/android/local.properties
+      - name: Write keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > clients/android/app/release.keystore
+      - name: Validate signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== Checking local.properties ==="
+
+          test -f clients/android/local.properties
+
+          KEYSTORE_PASS=$(grep '^KEYSTORE_PASS=' clients/android/local.properties | cut -d= -f2-)
+          ALIAS_NAME=$(grep '^ALIAS_NAME=' clients/android/local.properties | cut -d= -f2-)
+          ALIAS_PASS=$(grep '^ALIAS_PASS=' clients/android/local.properties | cut -d= -f2-)
+
+          [ -n "$KEYSTORE_PASS" ] || { echo "KEYSTORE_PASS missing"; exit 1; }
+          [ -n "$ALIAS_NAME" ] || { echo "ALIAS_NAME missing"; exit 1; }
+          [ -n "$ALIAS_PASS" ] || { echo "ALIAS_PASS missing"; exit 1; }
+
+          echo "✓ local.properties looks valid"
+
+          echo "=== Checking keystore file ==="
+
+          test -f clients/android/app/release.keystore
+
+          file clients/android/app/release.keystore
+
+          echo "=== Checking keystore password ==="
+
+          keytool -list \
+            -keystore clients/android/app/release.keystore \
+            -storepass "$KEYSTORE_PASS" \
+            > /dev/null
+
+          echo "✓ keystore password valid"
+
+          echo "=== Checking alias exists ==="
+
+          keytool -list -v \
+            -keystore clients/android/app/release.keystore \
+            -storepass "$KEYSTORE_PASS" \
+            | grep -F "Alias name: $ALIAS_NAME"
+
+          echo "✓ alias exists"
+
+          echo "=== Checking alias password ==="
+
+          keytool -exportcert \
+            -keystore clients/android/app/release.keystore \
+            -storepass "$KEYSTORE_PASS" \
+            -alias "$ALIAS_NAME" \
+            -keypass "$ALIAS_PASS" \
+            -rfc > /dev/null
+
+          echo "✓ alias password valid"
+
+          echo "=== Signing configuration verified ==="
+      - name: Build library
         run: |-
-          go run -v ./cmd/internal/update_android_version --ci --nightly
-      - name: Build
-        run: |-
-          mkdir -p clients/android/app/libs
-          cp *.aar clients/android/app/libs
-          cd clients/android
-          ./gradlew --build-cache --parallel ${{ matrix.task }}
+          make lib_install
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          make lib_android
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          LOCAL_PROPERTIES: ${{ secrets.LOCAL_PROPERTIES }}
+      - name: Gradle cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.gradle
+          key: gradle-${{ hashFiles('**/*.gradle') }}
+      - name: Build APK
+        run: |-
+          mkdir clients/android/app/libs
+          cp *.aar clients/android/app/libs
+          cd clients/android
+          ./gradlew :app:assembleOtherRelease :app:assembleOtherLegacyRelease
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       - name: Prepare upload
         run: |-
           mkdir -p dist
-          cp clients/android/${{ matrix.output }} dist
+          #cp clients/android/app/build/outputs/apk/play/release/*.apk dist
+          cp clients/android/app/build/outputs/apk/other/release/*.apk dist
+          cp clients/android/app/build/outputs/apk/otherLegacy/release/*.apk dist
           VERSION_CODE=$(grep VERSION_CODE clients/android/version.properties | cut -d= -f2)
           VERSION_NAME=$(grep VERSION_NAME clients/android/version.properties | cut -d= -f2)
           cat > dist/SFA-version-metadata.json << EOF
@@ -837,638 +919,19 @@ jobs:
           }
           EOF
           cat dist/SFA-version-metadata.json
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-android-apks-${{ matrix.variant }}
-          path: 'dist'
-  publish_android:
-    name: Publish Android
-    if: github.event_name == 'workflow_dispatch' && inputs.build == 'publish-android' && (github.ref == 'refs/heads/stable' || github.ref == 'refs/heads/testing')
-    runs-on: ubuntu-latest
-    needs:
-      - calculate_version
-      - build_android_library
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 1
-      - name: Checkout Android client
-        run: git submodule update --init clients/android
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.12
-          cache: false
-      - name: Cache Go modules
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-linux-${{ hashFiles('go.sum') }}
-          restore-keys: go-mod-linux-
-      - name: Cache Go tool builds
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-build-tools-linux-${{ hashFiles('go.sum') }}
-          restore-keys: go-build-tools-linux-
-      - name: Setup Android NDK
-        id: setup-ndk
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r28
-      - name: Setup OpenJDK
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
-        with:
-          distribution: temurin
-          java-version: 17
-      - name: Set tag
-        run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
-      - name: Download libraries
-        uses: actions/download-artifact@v4
-        with:
-          pattern: libbox-android-*
-          path: libbox-inputs
-          merge-multiple: true
-      - name: Merge libraries
-        run: |-
-          go run ./cmd/internal/merge_aar -output libbox.aar libbox-inputs/*/libbox.aar
-          go run ./cmd/internal/merge_aar -output libbox-legacy.aar libbox-inputs/*/libbox-legacy.aar
-      - name: Checkout main branch
-        if: github.ref == 'refs/heads/stable' && github.event_name != 'workflow_dispatch'
-        run: |-
-          cd clients/android
-          git checkout main
-      - name: Checkout dev branch
-        if: github.ref == 'refs/heads/testing'
-        run: |-
-          cd clients/android
-          git checkout dev
-      - name: Checkout submodule recursive
-        run: |-
-          cd clients/android
-          git submodule update --init --recursive -v
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
-        with:
-          cache-provider: basic
-      - name: Prepare build
-        run: |-
-          go run -v ./cmd/internal/update_android_version --ci
-          mkdir -p clients/android/app/libs
-          cp *.aar clients/android/app/libs
-          cd clients/android
-          echo -n "$SERVICE_ACCOUNT_CREDENTIALS" | base64 --decode > service-account-credentials.json
-          chmod 600 service-account-credentials.json
-          jq -e '
-            .type == "service_account" and
-            (.project_id | type == "string" and length > 0) and
-            (.private_key | type == "string" and length > 0) and
-            (.client_email | type == "string" and length > 0) and
-            (.token_uri | type == "string" and length > 0)
-          ' service-account-credentials.json > /dev/null
-          jq -r '.private_key' service-account-credentials.json | openssl pkey -check -noout
-        env:
-          LOCAL_PROPERTIES: ${{ secrets.LOCAL_PROPERTIES }}
-          SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.SERVICE_ACCOUNT_CREDENTIALS }}
-      - name: Publish to Google Play
-        run: |-
-          cd clients/android
-          ./gradlew --build-cache --parallel :app:publishPlayReleaseBundle
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          LOCAL_PROPERTIES: ${{ secrets.LOCAL_PROPERTIES }}
-  build_apple_library:
-    name: Build Apple library (${{ matrix.artifact }})
-    runs-on: ${{ matrix.build && 'macos-26' || 'ubuntu-latest' }}
-    if: github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'Apple-release' || inputs.build == 'iOS' || inputs.build == 'macOS' || inputs.build == 'tvOS' || inputs.build == 'macOS-standalone'
-    needs:
-      - calculate_version
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - artifact: ios-arm64
-            platform: ios/arm64
-            build: ${{ github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'Apple-release' || inputs.build == 'iOS' }}
-          - artifact: tvos-arm64
-            platform: tvos/arm64
-            build: ${{ github.event_name == 'workflow_dispatch' && (inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'tvOS') }}
-          - artifact: macos-arm64
-            platform: macos/arm64
-            build: ${{ github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'Apple-release' || inputs.build == 'macOS' || inputs.build == 'macOS-standalone' }}
-          - artifact: macos-amd64
-            platform: macos/amd64
-            build: ${{ github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'Apple-release' || inputs.build == 'macOS' || inputs.build == 'macOS-standalone' }}
-    steps:
-      - name: Checkout
-        if: matrix.build
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 1
-      - name: Setup Go
-        if: matrix.build
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.12
-          cache: false
-      - name: Cache Go modules
-        if: matrix.build
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-macos-${{ hashFiles('go.sum') }}
-          restore-keys: go-mod-macos-
-      - name: Cache Go build
-        if: matrix.build
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/go-build
-          key: libbox-go-build-${{ matrix.artifact }}-1.25.12-${{ hashFiles('go.sum') }}
-          restore-keys: libbox-go-build-${{ matrix.artifact }}-1.25.12-
-      - name: Set tag
-        if: matrix.build
-        run: git tag v${{ needs.calculate_version.outputs.version }} -f
-      - name: Build library
-        if: matrix.build
-        run: |-
-          make lib_install
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          go run ./cmd/internal/build_libbox -target apple -platform ${{ matrix.platform }}
-          mkdir -p dist
-          tar -cf dist/Libbox-${{ matrix.artifact }}.tar Libbox.xcframework
-      - name: Upload library
-        if: matrix.build
-        uses: actions/upload-artifact@v4
-        with:
-          name: libbox-apple-${{ matrix.artifact }}
-          path: dist
-          compression-level: 1
-  build_apple:
-    name: Build Apple release clients
-    runs-on: ${{ matrix.if && 'macos-26' || 'ubuntu-latest' }}
-    if: github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Apple-release' || inputs.build == 'macOS-standalone'
-    needs:
-      - calculate_version
-      - build_apple_library
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS-standalone
-            if: ${{ github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Apple-release' || inputs.build == 'macOS-standalone' }}
-            type: standalone
-            platform: macos
-            variant: all
-            library_arch: '*'
-            scheme: ''
-            destination: ''
-            archive: ''
-            upload: ''
-    steps: &build_apple_steps
-      - name: Checkout
-        if: matrix.if
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 1
-      - name: Checkout Apple client
-        if: matrix.if
-        run: git submodule update --init --recursive clients/apple
-      - name: Setup Go
-        if: matrix.if
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.12
-          cache: false
-      - name: Cache Go modules
-        if: matrix.if
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-macos-${{ hashFiles('go.sum') }}
-          restore-keys: go-mod-macos-
-      - name: Cache Go tool builds
-        if: matrix.if
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/go-build
-          key: go-build-tools-macos-${{ hashFiles('go.sum') }}
-          restore-keys: go-build-tools-macos-
-      - name: Set tag
-        if: matrix.if
-        run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
-          echo "VERSION=${{ needs.calculate_version.outputs.version }}" >> "$GITHUB_ENV"
-      - name: Checkout main branch
-        if: matrix.if && github.ref == 'refs/heads/stable' && github.event_name != 'workflow_dispatch'
-        run: |-
-          cd clients/apple
-          git checkout main
-      - name: Checkout dev branch
-        if: matrix.if && github.ref == 'refs/heads/testing'
-        run: |-
-          cd clients/apple
-          git checkout dev
-      - name: Cache Swift packages
-        if: matrix.if
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: apple-spm-${{ hashFiles('clients/apple/sing-box.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: apple-spm-
-      - name: Cache Xcode build data
-        if: matrix.if
-        uses: actions/cache@v4
-        with:
-          path: ${{ matrix.type == 'standalone' && 'clients/apple/build/SFM.System-*.dd' || matrix.type == 'jailbreak' && 'clients/apple/build/jailbreak/DerivedData' || format('{0}/DerivedData', runner.temp) }}
-          key: apple-derived-data-${{ matrix.type }}-${{ matrix.platform }}-${{ matrix.variant || 'default' }}-${{ hashFiles('clients/apple/sing-box.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
-          restore-keys: |
-            apple-derived-data-${{ matrix.type }}-${{ matrix.platform }}-${{ matrix.variant || 'default' }}-${{ hashFiles('clients/apple/sing-box.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
-            apple-derived-data-${{ matrix.type }}-${{ matrix.platform }}-${{ matrix.variant || 'default' }}-
-      - name: Setup App Store Connect key
-        if: matrix.if && matrix.type != 'jailbreak' && github.event_name == 'workflow_dispatch'
-        run: |-
-          ASC_KEY_PATH=$RUNNER_TEMP/AuthKey.p8
-          echo -n "$ASC_KEY" | base64 --decode -o $ASC_KEY_PATH
-          echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
-          echo "ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
-          echo "ASC_KEY_ISSUER_ID=$ASC_KEY_ISSUER_ID" >> "$GITHUB_ENV"
-        env:
-          ASC_KEY: ${{ secrets.LEGACY_ASC_KEY }}
-          ASC_KEY_ID: ${{ secrets.LEGACY_ASC_KEY_ID }}
-          ASC_KEY_ISSUER_ID: ${{ secrets.LEGACY_ASC_KEY_ISSUER_ID }}
-      - name: Install Apple provisioning profiles
-        if: matrix.if && matrix.type != 'jailbreak'
-        run: |-
-          PROFILES_ZIP_PATH=$RUNNER_TEMP/AppleProvisioningProfiles.zip
-          for variable in $(compgen -v | grep -E '^PROVISIONING_PROFILES_[0-9]+$' | sort -t_ -k3 -n); do
-            printf '%s' "${!variable}"
-          done | base64 --decode -o $PROFILES_ZIP_PATH
-          PROFILES_PATH="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-          mkdir -p "$PROFILES_PATH"
-          unzip -q $PROFILES_ZIP_PATH -d "$PROFILES_PATH"
-        env:
-          PROVISIONING_PROFILES_1: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_1 }}
-          PROVISIONING_PROFILES_2: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_2 }}
-          PROVISIONING_PROFILES_3: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_3 }}
-          PROVISIONING_PROFILES_4: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_4 }}
-          PROVISIONING_PROFILES_5: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_5 }}
-          PROVISIONING_PROFILES_6: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_6 }}
-          PROVISIONING_PROFILES_7: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_7 }}
-          PROVISIONING_PROFILES_8: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_8 }}
-          PROVISIONING_PROFILES_9: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_9 }}
-          PROVISIONING_PROFILES_10: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_10 }}
-          PROVISIONING_PROFILES_11: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_11 }}
-          PROVISIONING_PROFILES_12: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_12 }}
-          PROVISIONING_PROFILES_13: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_13 }}
-          PROVISIONING_PROFILES_14: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_14 }}
-          PROVISIONING_PROFILES_15: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_15 }}
-          PROVISIONING_PROFILES_16: ${{ secrets.LEGACY_APPLE_PROVISIONING_PROFILES_16 }}
-      - name: Setup Apple Development certificate
-        if: matrix.if && matrix.type != 'jailbreak'
-        run: |-
-          CERTIFICATE_PATH=$RUNNER_TEMP/AppleDevelopment.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/apple-development.keychain-db
-          echo -n "$APPLE_DEVELOPMENT_CERTIFICATES_P12" | base64 --decode -o $CERTIFICATE_PATH
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH
-          security default-keychain -d user -s $KEYCHAIN_PATH
-          security find-identity -v -p codesigning $KEYCHAIN_PATH
-          echo "APPLE_DEVELOPMENT_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-        env:
-          APPLE_DEVELOPMENT_CERTIFICATES_P12: ${{ secrets.LEGACY_APPLE_DEVELOPMENT_CERTIFICATES_P12 }}
-          P12_PASSWORD: ${{ secrets.LEGACY_APPLE_DEVELOPMENT_P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-      - name: Setup Developer ID certificates
-        if: matrix.if && matrix.type == 'standalone'
-        run: |-
-          CERTIFICATE_PATH=$RUNNER_TEMP/DeveloperIDCertificates.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/developer-id.keychain-db
-          echo -n "$DEVELOPER_ID_CERTIFICATES_P12" | base64 --decode -o $CERTIFICATE_PATH
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH $APPLE_DEVELOPMENT_KEYCHAIN_PATH
-          security default-keychain -d user -s $KEYCHAIN_PATH
-          security find-identity -v -p codesigning $KEYCHAIN_PATH
-          echo "SIGNING_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-        env:
-          DEVELOPER_ID_CERTIFICATES_P12: ${{ secrets.LEGACY_DEVELOPER_ID_CERTIFICATES_P12 }}
-          P12_PASSWORD: ${{ secrets.LEGACY_DEVELOPER_ID_P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-      - name: Setup notarization credentials
-        if: matrix.if && matrix.type == 'standalone' && github.event_name == 'workflow_dispatch'
-        run: |-
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $SIGNING_KEYCHAIN_PATH
-          xcrun notarytool store-credentials "notarytool-password" \
-            --key $ASC_KEY_PATH \
-            --key-id $ASC_KEY_ID \
-            --issuer $ASC_KEY_ISSUER_ID \
-            --keychain $SIGNING_KEYCHAIN_PATH
-        env:
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-      - name: Install jailbreak packaging tools
-        if: matrix.if && matrix.type == 'jailbreak'
-        run: |-
-          brew install dpkg ldid
-      - name: Trust build plugins
-        if: matrix.if && matrix.type != 'jailbreak'
-        run: |-
-          defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
-      - name: Download library
-        if: matrix.if
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ${{ matrix.type == 'standalone' && format('libbox-apple-macos-{0}', matrix.library_arch) || format('libbox-apple-{0}-*', matrix.platform) }}
-          path: libbox-inputs
-          merge-multiple: true
-      - name: Prepare library
-        if: matrix.if
-        run: |-
-          mkdir -p libbox-slices
-          library_inputs=()
-          for library_archive in libbox-inputs/*.tar; do
-            slice_name=$(basename "$library_archive" .tar)
-            slice_path="libbox-slices/$slice_name"
-            mkdir -p "$slice_path"
-            tar -xf "$library_archive" -C "$slice_path"
-            library_inputs+=("$slice_path/Libbox.xcframework")
-          done
-          go run ./cmd/internal/merge_apple_xcframework \
-            -output clients/apple/Libbox.xcframework \
-            "${library_inputs[@]}"
-      - name: Update macOS version
-        if: matrix.if && matrix.name == 'macOS' && github.event_name == 'workflow_dispatch'
-        run: |-
-          MACOS_PROJECT_VERSION=$(go run -v ./cmd/internal/app_store_connect next_macos_project_version)
-          echo "MACOS_PROJECT_VERSION=$MACOS_PROJECT_VERSION"
-          echo "MACOS_PROJECT_VERSION=$MACOS_PROJECT_VERSION" >> "$GITHUB_ENV"
-      - name: Update version
-        if: matrix.if && matrix.name != 'iOS'
-        run: |-
-          go run -v ./cmd/internal/update_apple_version --ci
-      - name: Archive App Store build
-        if: matrix.if && matrix.type == 'app-store'
-        run: |-
-          cd clients/apple
-          xcodebuild archive \
-            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -scheme "${{ matrix.scheme }}" \
-            -configuration Release \
-            -destination "${{ matrix.destination }}" \
-            -archivePath "${{ matrix.archive }}"
-        env:
-          DISABLE_SWIFTLINT: "1"
-      - name: Upload to App Store Connect
-        if: matrix.if && matrix.type == 'app-store' && github.event_name == 'workflow_dispatch'
-        run: |-
-          go run -v ./cmd/internal/app_store_connect cancel_app_store ${{ matrix.platform }}
-          cd clients/apple
-          xcodebuild -exportArchive \
-            -archivePath "${{ matrix.archive }}" \
-            -exportOptionsPlist ${{ matrix.upload }} \
-            -authenticationKeyPath $ASC_KEY_PATH \
-            -authenticationKeyID $ASC_KEY_ID \
-            -authenticationKeyIssuerID $ASC_KEY_ISSUER_ID
-      - name: Publish to TestFlight
-        if: matrix.if && matrix.type == 'app-store' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/testing'
-        run: |-
-          arguments=(publish_testflight "${{ matrix.platform }}")
-          if [[ -n "$TEST_MESSAGE" ]]; then
-            arguments+=("$TEST_MESSAGE")
-          fi
-          go run -v ./cmd/internal/app_store_connect "${arguments[@]}"
-        env:
-          TEST_MESSAGE: ${{ inputs.test_message }}
-      - name: Build standalone packages
-        if: matrix.if && matrix.type == 'standalone'
-        run: |-
-          make -C clients/apple build_macos_pkg_${{ matrix.variant }}
-        env:
-          DISABLE_SWIFTLINT: "1"
-          XCODEBUILD_FLAGS: -clonedSourcePackagesDirPath ${{ runner.temp }}/SourcePackages
-      - name: Notarize standalone packages
-        if: matrix.if && matrix.type == 'standalone' && github.event_name == 'workflow_dispatch'
-        run: |-
-          make -C clients/apple notarize_macos_pkg_${{ matrix.variant }}
-      - name: Prepare standalone packages
-        if: matrix.if && matrix.type == 'standalone'
-        run: |-
-          mkdir -p dist
-          for label in Apple Intel Universal; do
-            cp "clients/apple/build/SFM-${label}.pkg" "dist/SFM-${VERSION}-${label}.pkg"
-          done
-          pushd clients/apple/build/SFM.System-universal.xcarchive
-          zip -r SFM.dSYMs.zip dSYMs
-          popd
-          cp clients/apple/build/SFM.System-universal.xcarchive/SFM.dSYMs.zip "dist/SFM-${VERSION}.dSYMs.zip"
-      - name: Build jailbreak package
-        if: matrix.if && matrix.type == 'jailbreak'
-        run: |-
-          make -C clients/apple build_ios_deb
-          mkdir -p dist
-          cp "clients/apple/build/jailbreak/SFI-${VERSION}-iphoneos-arm64.deb" dist
-        env:
-          XCODEBUILD_CLONED_SOURCE_PACKAGES_DIR_PATH: ${{ runner.temp }}/SourcePackages
-      - name: Report cache directory sizes
-        if: matrix.if
-        run: |-
-          du -sh "$RUNNER_TEMP/SourcePackages"/* 2>/dev/null || true
-          du -sh "$RUNNER_TEMP/DerivedData" 2>/dev/null || true
-          du -sh clients/apple/build/jailbreak/DerivedData 2>/dev/null || true
-          du -sh clients/apple/build/SFM.System-*.dd 2>/dev/null || true
-      - name: Prune Swift package repositories
-        if: matrix.if
-        run: rm -rf "$RUNNER_TEMP/SourcePackages/repositories"
-      - name: Upload release artifact
-        if: matrix.if && (matrix.type == 'standalone' || matrix.type == 'jailbreak')
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-apple-${{ matrix.type }}${{ matrix.variant && format('-{0}', matrix.variant) || '' }}
-          path: 'dist'
-  build_apple_app_store:
-    name: Build Apple App Store clients
-    runs-on: ${{ matrix.if && 'macos-26' || 'ubuntu-latest' }}
-    if: github.event_name == 'workflow_dispatch' && (inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'iOS' || inputs.build == 'macOS' || inputs.build == 'tvOS')
-    needs:
-      - calculate_version
-      - build_apple_library
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: iOS
-            if: ${{ inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'iOS' }}
-            type: app-store
-            platform: ios
-            scheme: SFI
-            destination: 'generic/platform=iOS'
-            archive: build/SFI.xcarchive
-            upload: SFI/Upload.plist
-            variant: ''
-            library_arch: ''
-          - name: macOS
-            if: ${{ inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'macOS' }}
-            type: app-store
-            platform: macos
-            scheme: SFM
-            destination: 'generic/platform=macOS'
-            archive: build/SFM.xcarchive
-            upload: SFI/Upload.plist
-            variant: ''
-            library_arch: ''
-          - name: tvOS
-            if: ${{ inputs.build == 'All' || inputs.build == 'Apple' || inputs.build == 'tvOS' }}
-            type: app-store
-            platform: tvos
-            scheme: SFT
-            destination: 'generic/platform=tvOS'
-            archive: build/SFT.xcarchive
-            upload: SFI/Upload.plist
-            variant: ''
-            library_arch: ''
-    steps: *build_apple_steps
-  upload:
-    name: Upload builds
-    if: "!failure() && github.event_name == 'workflow_dispatch' && (inputs.build == 'All' || inputs.build == 'Binary' || inputs.build == 'Android' || inputs.build == 'Apple-release' || inputs.build == 'macOS-standalone')"
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
-    needs:
-      - calculate_version
-      - build
-      - build_darwin
-      - build_windows
-      - build_android_library
-      - build_android
-      - build_apple_library
-      - build_apple
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 1
-      - name: Cache ghr
-        uses: actions/cache@v4
-        id: cache-ghr
-        with:
-          path: |
-            ~/go/bin/ghr
-          key: ghr
-      - name: Setup ghr
-        if: steps.cache-ghr.outputs.cache-hit != 'true'
-        run: |-
-          cd $HOME
-          git clone https://github.com/nekohasekai/ghr ghr
-          cd ghr
-          go install -v .
-      - name: Set tag
-        run: |-
-          git ls-remote --exit-code --tags origin v${{ needs.calculate_version.outputs.version }} || echo "PUBLISHED=false" >> "$GITHUB_ENV"
-          git tag v${{ needs.calculate_version.outputs.version }} -f
-          echo "VERSION=${{ needs.calculate_version.outputs.version }}" >> "$GITHUB_ENV"
-      - name: Download builds
-        uses: actions/download-artifact@v5
-        with:
-          pattern: binary-*
-          path: dist
-          merge-multiple: true
-      - name: Attest build provenance
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
-        with:
-          subject-path: 'dist/**'
-      - name: Upload builds
-        if: ${{ env.PUBLISHED == 'false' }}
-        run: |-
-          export PATH="$PATH:$HOME/go/bin"
-          ghr --replace --draft --prerelease -p 5 "v${VERSION}" dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Replace builds
-        if: ${{ env.PUBLISHED != 'false' }}
-        run: |-
-          export PATH="$PATH:$HOME/go/bin"
-          ghr --replace -p 5 "v${VERSION}" dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  cache_gc:
-    name: Cache GC
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    needs:
-      - build
-      - build_darwin
-      - build_windows
-      - build_android_library
-      - build_android
-      - build_apple_library
-      - build_apple
-      - build_apple_app_store
-      - upload
-    steps:
-      - name: Delete superseded caches
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |-
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" --paginate \
-            --jq '.actions_caches[] | [.id, .ref, .created_at, .last_accessed_at, .size_in_bytes, .key] | @tsv' > "$RUNNER_TEMP/caches.tsv"
-          python3 - "$GITHUB_REPOSITORY" "$RUNNER_TEMP/caches.tsv" <<'EOF'
-          import re
-          import subprocess
-          import sys
+      - name: Upload to release
+        run: |
+          cd dist
+          shopt -s nullglob
+          apks=( *.apk )
 
-          repository, list_path = sys.argv[1], sys.argv[2]
-          budget = 9 * 1024 * 1024 * 1024
-          rows = []
-          with open(list_path) as list_file:
-              for line in list_file:
-                  cache_id, ref, created_at, accessed_at, size, key = line.rstrip("\n").split("\t")
-                  family = key
-                  while True:
-                      stripped = re.sub(r"-[0-9a-f]{16,}$", "", family)
-                      if stripped == family:
-                          break
-                      family = stripped
-                  rows.append({
-                      "id": cache_id, "ref": ref, "created": created_at,
-                      "accessed": accessed_at, "size": int(size), "key": key,
-                      "family": family,
-                  })
-          newest = {}
-          for row in rows:
-              group = (row["ref"], row["family"])
-              if group not in newest or row["created"] > newest[group]["created"]:
-                  newest[group] = row
-          doomed = [row for row in rows if newest[(row["ref"], row["family"])] is not row]
-          kept = [row for row in rows if newest[(row["ref"], row["family"])] is row]
-          total = sum(row["size"] for row in kept)
-          for row in sorted(kept, key=lambda entry: entry["accessed"]):
-              if total <= budget:
-                  break
-              doomed.append(row)
-              total -= row["size"]
-          for row in doomed:
-              print(f"delete {row['size'] >> 20}MB {row['key']} ({row['ref']})")
-              subprocess.run(
-                  ["gh", "api", "-X", "DELETE", f"repos/{repository}/actions/caches/{row['id']}"],
-                  check=False,
-              )
-          print(f"kept {len(rows) - len(doomed)} caches, {total >> 20}MB total")
-          EOF
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "No APK files found in dist/"
+            exit 1
+          fi
+
+          for file in "${apks[@]}"; do
+            gh release upload ${{ needs.set_version.outputs.tag }} "$file" --clobber
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
