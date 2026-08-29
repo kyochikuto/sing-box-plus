@@ -72,7 +72,7 @@ func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextL
 	if len(options.TLS.ClientKey) > 0 || options.TLS.ClientKeyPath != "" {
 		return nil, E.New("client_key is not supported on naive outbound")
 	}
-	if options.TLS.Fragment || options.TLS.RecordFragment {
+	if options.TLS.Fragment.Enabled {
 		return nil, E.New("fragment is not supported on naive outbound")
 	}
 	if options.TLS.KernelTx || options.TLS.KernelRx {
