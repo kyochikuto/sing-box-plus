@@ -299,6 +299,13 @@ func (s *CommandServer) RecordScreenState(on bool) {
 	}
 }
 
+func (s *CommandServer) RecordLockState(locked bool) {
+	recorder := s.powerManager.Recorder()
+	if recorder != nil {
+		recorder.RecordLockState(locked)
+	}
+}
+
 func (s *CommandServer) ResetNetwork() {
 	instance := s.StartedService.Instance()
 	if instance == nil || instance.Box() == nil {
