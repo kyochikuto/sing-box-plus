@@ -115,6 +115,8 @@ const (
 	eventTypeWake         = "ne-wake"
 	eventTypeScreenOn     = "screen-on"
 	eventTypeScreenOff    = "screen-off"
+	eventTypeDeviceLock   = "device-lock"
+	eventTypeDeviceUnlock = "device-unlock"
 	eventTypeService      = "service"
 )
 
