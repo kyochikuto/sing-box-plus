@@ -14,7 +14,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/sniff"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/common/tlsspoof"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
@@ -127,8 +127,8 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		m.logger.ErrorContext(ctx, err)
 		return
 	}
-	if metadata.TLSFragment || metadata.TLSRecordFragment {
-		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment, metadata.TLSRecordFragment, metadata.TLSFragmentFallbackDelay)
+	if metadata.TLSFragment.Enabled {
+		remoteConn = tf.NewConn(ctx, remoteConn, metadata.TLSFragment.Packets, metadata.TLSFragment.Length, metadata.TLSFragment.Interval, metadata.TLSFragment.MaxSplits)
 	}
 	if metadata.TLSSpoof != "" {
 		spoofConn, spoofErr := tlsspoof.NewConn(remoteConn, metadata.TLSSpoofMethod, metadata.TLSSpoof)

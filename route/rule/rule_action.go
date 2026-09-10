@@ -38,8 +38,6 @@ func newRuleActionRouteOptions(options option.RawRouteOptionsActionOptions) (Rul
 		UDPConnect:                options.UDPConnect,
 		UDPTimeout:                time.Duration(options.UDPTimeout),
 		TLSFragment:               options.TLSFragment,
-		TLSFragmentFallbackDelay:  time.Duration(options.TLSFragmentFallbackDelay),
-		TLSRecordFragment:         options.TLSRecordFragment,
 		TLSSpoof:                  spoof,
 		TLSSpoofMethod:            spoofMethod,
 	}, nil
@@ -232,9 +230,7 @@ type RuleActionRouteOptions struct {
 	UDPDisableDomainUnmapping bool
 	UDPConnect                bool
 	UDPTimeout                time.Duration
-	TLSFragment               bool
-	TLSFragmentFallbackDelay  time.Duration
-	TLSRecordFragment         bool
+	TLSFragment               option.OutboundTLSFragmentOptions
 	TLSSpoof                  string
 	TLSSpoofMethod            tlsspoof.Method
 }
@@ -276,14 +272,8 @@ func (r *RuleActionRouteOptions) Descriptions() []string {
 	if r.UDPTimeout > 0 {
 		descriptions = append(descriptions, "udp-timeout")
 	}
-	if r.TLSFragment {
+	if r.TLSFragment.Enabled {
 		descriptions = append(descriptions, "tls-fragment")
-	}
-	if r.TLSFragmentFallbackDelay > 0 {
-		descriptions = append(descriptions, F.ToString("tls-fragment-fallback-delay=", r.TLSFragmentFallbackDelay.String()))
-	}
-	if r.TLSRecordFragment {
-		descriptions = append(descriptions, "tls-record-fragment")
 	}
 	if r.TLSSpoof != "" {
 		descriptions = append(descriptions, F.ToString("tls-spoof=", r.TLSSpoof))
