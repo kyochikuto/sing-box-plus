@@ -187,11 +187,9 @@ type RawRouteOptionsActionOptions struct {
 	UDPConnect                bool               `json:"udp_connect,omitempty"`
 	UDPTimeout                badoption.Duration `json:"udp_timeout,omitempty"`
 
-	TLSFragment              bool               `json:"tls_fragment,omitempty"`
-	TLSFragmentFallbackDelay badoption.Duration `json:"tls_fragment_fallback_delay,omitempty"`
-	TLSRecordFragment        bool               `json:"tls_record_fragment,omitempty"`
-	TLSSpoof                 string             `json:"tls_spoof,omitempty"`
-	TLSSpoofMethod           string             `json:"tls_spoof_method,omitempty" enum:"wrong-sequence,wrong-checksum,wrong-ack,wrong-md5,wrong-timestamp"`
+	TLSFragment    OutboundTLSFragmentOptions `json:"tls_fragment"`
+	TLSSpoof       string                     `json:"tls_spoof,omitempty"`
+	TLSSpoofMethod string                     `json:"tls_spoof_method,omitempty" enum:"wrong-sequence,wrong-checksum,wrong-ack,wrong-md5,wrong-timestamp"`
 }
 
 type RouteOptionsActionOptions RawRouteOptionsActionOptions
@@ -203,9 +201,6 @@ func (r *RouteOptionsActionOptions) UnmarshalJSON(data []byte) error {
 	}
 	if *r == (RouteOptionsActionOptions{}) {
 		return E.New("empty route option action")
-	}
-	if r.TLSFragment && r.TLSRecordFragment {
-		return E.New("`tls_fragment` and `tls_record_fragment` are mutually exclusive")
 	}
 	return nil
 }
