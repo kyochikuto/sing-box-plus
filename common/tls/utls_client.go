@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tlsfragment"
+	tf "github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/common/tlsspoof"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
@@ -27,18 +27,16 @@ import (
 )
 
 type UTLSClientConfig struct {
-	ctx                   context.Context
-	config                *utls.Config
-	serverName            string
-	disableSNI            bool
-	verifyServerName      bool
-	handshakeTimeout      time.Duration
-	id                    utls.ClientHelloID
-	fragment              bool
-	fragmentFallbackDelay time.Duration
-	recordFragment        bool
-	spoof                 string
-	spoofMethod           tlsspoof.Method
+	ctx              context.Context
+	config           *utls.Config
+	serverName       string
+	disableSNI       bool
+	verifyServerName bool
+	handshakeTimeout time.Duration
+	id               utls.ClientHelloID
+	fragment         *option.OutboundTLSFragmentOptions
+	spoof            string
+	spoofMethod      tlsspoof.Method
 }
 
 func (c *UTLSClientConfig) ServerName() string {
@@ -83,8 +81,12 @@ func (c *UTLSClientConfig) STDConfig() (*STDConfig, error) {
 }
 
 func (c *UTLSClientConfig) Client(conn net.Conn) (Conn, error) {
-	if c.fragment || c.recordFragment {
-		conn = tf.NewConn(conn, c.ctx, c.fragment, c.recordFragment, c.fragmentFallbackDelay)
+	if c.fragment != nil && c.fragment.Enabled {
+		conn = tf.NewConn(c.ctx, conn,
+			c.fragment.Packets,
+			c.fragment.Length,
+			c.fragment.Interval,
+			c.fragment.MaxSplits)
 	}
 	conn, err := applyTLSSpoof(conn, c.spoof, c.spoofMethod)
 	if err != nil {
@@ -99,18 +101,16 @@ func (c *UTLSClientConfig) SetSessionIDGenerator(generator func(clientHello []by
 
 func (c *UTLSClientConfig) Clone() Config {
 	cloned := &UTLSClientConfig{
-		ctx:                   c.ctx,
-		config:                c.config.Clone(),
-		serverName:            c.serverName,
-		disableSNI:            c.disableSNI,
-		verifyServerName:      c.verifyServerName,
-		handshakeTimeout:      c.handshakeTimeout,
-		id:                    c.id,
-		fragment:              c.fragment,
-		fragmentFallbackDelay: c.fragmentFallbackDelay,
-		recordFragment:        c.recordFragment,
-		spoof:                 c.spoof,
-		spoofMethod:           c.spoofMethod,
+		ctx:              c.ctx,
+		config:           c.config.Clone(),
+		serverName:       c.serverName,
+		disableSNI:       c.disableSNI,
+		verifyServerName: c.verifyServerName,
+		handshakeTimeout: c.handshakeTimeout,
+		id:               c.id,
+		fragment:         c.fragment,
+		spoof:            c.spoof,
+		spoofMethod:      c.spoofMethod,
 	}
 	cloned.SetServerName(cloned.serverName)
 	return cloned
@@ -308,18 +308,16 @@ func newUTLSClient(ctx context.Context, logger logger.ContextLogger, serverAddre
 		return nil, err
 	}
 	var config Config = &UTLSClientConfig{
-		ctx:                   ctx,
-		config:                &tlsConfig,
-		serverName:            serverName,
-		disableSNI:            options.DisableSNI,
-		verifyServerName:      options.DisableSNI && !options.Insecure,
-		handshakeTimeout:      handshakeTimeout,
-		id:                    id,
-		fragment:              options.Fragment,
-		fragmentFallbackDelay: time.Duration(options.FragmentFallbackDelay),
-		recordFragment:        options.RecordFragment,
-		spoof:                 spoof,
-		spoofMethod:           spoofMethod,
+		ctx:              ctx,
+		config:           &tlsConfig,
+		serverName:       serverName,
+		disableSNI:       options.DisableSNI,
+		verifyServerName: options.DisableSNI && !options.Insecure,
+		handshakeTimeout: handshakeTimeout,
+		id:               id,
+		fragment:         options.Fragment,
+		spoof:            spoof,
+		spoofMethod:      spoofMethod,
 	}
 	config.SetServerName(serverName)
 	if options.ECH != nil && options.ECH.Enabled {
