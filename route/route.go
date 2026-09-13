@@ -13,9 +13,9 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	R "github.com/sagernet/sing-box/route/rule"
-	"github.com/sagernet/sing-mux"
-	"github.com/sagernet/sing-tun"
-	"github.com/sagernet/sing-vmess"
+	mux "github.com/sagernet/sing-mux"
+	tun "github.com/sagernet/sing-tun"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -655,12 +655,8 @@ match:
 			if routeOptions.UDPTimeout > 0 {
 				metadata.UDPTimeout = routeOptions.UDPTimeout
 			}
-			if routeOptions.TLSFragment {
-				metadata.TLSFragment = true
-				metadata.TLSFragmentFallbackDelay = routeOptions.TLSFragmentFallbackDelay
-			}
-			if routeOptions.TLSRecordFragment {
-				metadata.TLSRecordFragment = true
+			if routeOptions.TLSFragment.Enabled {
+				metadata.TLSFragment = routeOptions.TLSFragment
 			}
 			if routeOptions.TLSSpoof != "" {
 				metadata.TLSSpoof = routeOptions.TLSSpoof
