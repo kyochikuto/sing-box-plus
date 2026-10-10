@@ -4,7 +4,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -42,10 +41,7 @@ func main() {
 	for propLine := range strings.SplitSeq(string(localProps), "\n") {
 		propsList = append(propsList, strings.Split(propLine, "="))
 	}
-	var (
-		versionUpdated   bool
-		goVersionUpdated bool
-	)
+	var versionUpdated bool
 	for _, propPair := range propsList {
 		switch propPair[0] {
 		case "VERSION_NAME":
@@ -54,15 +50,9 @@ func main() {
 				versionUpdated = true
 				propPair[1] = newVersion
 			}
-		case "GO_VERSION":
-			if propPair[1] != runtime.Version() {
-				log.Info("updated Go version from ", propPair[1], " to ", runtime.Version())
-				goVersionUpdated = true
-				propPair[1] = runtime.Version()
-			}
 		}
 	}
-	if !(versionUpdated || goVersionUpdated) {
+	if !versionUpdated {
 		log.Info("version not changed")
 		return
 	} else if flagRunInCI && !flagRunNightly {
