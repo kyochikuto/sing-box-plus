@@ -4,10 +4,10 @@ import (
 	"net/netip"
 	"sync/atomic"
 
-	"github.com/sagernet/sing-tun"
+	"github.com/fractal-networking/wireguard-go/device"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/gtcpip/header"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/wireguard-go/device"
 )
 
 func (e *Endpoint) PortAddresses() (netip.Addr, netip.Addr) {
