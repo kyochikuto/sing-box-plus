@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"sync"
 
+	"github.com/fractal-networking/wireguard-go/device"
 	"github.com/sagernet/gvisor/pkg/buffer"
 	"github.com/sagernet/gvisor/pkg/tcpip"
 	"github.com/sagernet/gvisor/pkg/tcpip/header"
@@ -15,9 +16,8 @@ import (
 	"github.com/sagernet/gvisor/pkg/tcpip/transport/icmp"
 	"github.com/sagernet/gvisor/pkg/tcpip/transport/tcp"
 	"github.com/sagernet/gvisor/pkg/tcpip/transport/udp"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/wireguard-go/device"
 )
 
 var _ Device = (*systemStackDevice)(nil)
